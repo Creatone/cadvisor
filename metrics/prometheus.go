@@ -1543,7 +1543,43 @@ func NewPrometheusCollector(i infoProvider, f ContainerLabelsFunc, includedMetri
 		}...)
 
 	}
-
+	if includedMetrics.Has(container.ResctrlMetrics) {
+		c.containerMetrics = append(c.containerMetrics, []containerMetric{
+			{
+				name:      "container_mem_bandwidth_bytes",
+				help:      "Total memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
+				valueType: prometheus.GaugeValue,
+				getValues: func(s *info.ContainerStats) metricValues {
+					return metricValues{{value: float64(s.Resctrl.MemoryBandwidthTotalBytes), timestamp: s.Timestamp}}
+				},
+			},
+			{
+				name:      "container_mem_bandwidth_local_bytes",
+				help:      "Total local memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
+				valueType: prometheus.GaugeValue,
+				getValues: func(s *info.ContainerStats) metricValues {
+					return metricValues{{value: float64(s.Resctrl.MemoryBandwidthLocalBytes), timestamp: s.Timestamp}}
+				},
+			},
+			{
+				name:      "container_mem_bandwidth_remote_bytes",
+				help:      "Total remote memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
+				valueType: prometheus.GaugeValue,
+				getValues: func(s *info.ContainerStats) metricValues {
+					remoteValue := s.Resctrl.MemoryBandwidthTotalBytes - s.Resctrl.MemoryBandwidthLocalBytes
+					return metricValues{{value: float64(remoteValue), timestamp: s.Timestamp}}
+				},
+			},
+			{
+				name:      "container_llc_occupancy_bytes",
+				help:      "Total local memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
+				valueType: prometheus.GaugeValue,
+				getValues: func(s *info.ContainerStats) metricValues {
+					return metricValues{{value: float64(s.Resctrl.LLCOccupancy), timestamp: s.Timestamp}}
+				},
+			},
+		}...)
+	}
 	return c
 }
 

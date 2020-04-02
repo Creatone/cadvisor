@@ -874,6 +874,12 @@ type ProcessStats struct {
 	Ulimits []UlimitSpec `json:"ulimits,omitempty"`
 }
 
+type ResctrlStats struct {
+	MemoryBandwidthTotalBytes uint64 `json:"mbm_total_bytes,omitempty"`
+	MemoryBandwidthLocalBytes uint64 `json:"mbm_local_bytes,omitempty"`
+	LLCOccupancy              uint64 `json:"llc_occupancy,omitempty"`
+}
+
 type ContainerStats struct {
 	// The time of this stat point.
 	Timestamp time.Time               `json:"timestamp"`
@@ -882,6 +888,7 @@ type ContainerStats struct {
 	Memory    MemoryStats             `json:"memory,omitempty"`
 	Hugetlb   map[string]HugetlbStats `json:"hugetlb,omitempty"`
 	Network   NetworkStats            `json:"network,omitempty"`
+	Resctrl	  ResctrlStats			  `json:"resctrl,omitempty"`
 	// Filesystem statistics
 	Filesystem []FsStats `json:"filesystem,omitempty"`
 

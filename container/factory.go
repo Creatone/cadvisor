@@ -16,6 +16,7 @@ package container
 
 import (
 	"fmt"
+	"k8s.io/klog"
 	"sync"
 
 	"github.com/google/cadvisor/fs"
@@ -59,6 +60,7 @@ const (
 	ProcessMetrics                 MetricKind = "process"
 	HugetlbUsageMetrics            MetricKind = "hugetlb"
 	PerfMetrics                    MetricKind = "perf_event"
+	ResctrlMetrics                 MetricKind = "resctrl"
 )
 
 // AllMetrics represents all kinds of metrics that cAdvisor supported.
@@ -79,6 +81,7 @@ var AllMetrics = MetricSet{
 	AppMetrics:                     struct{}{},
 	HugetlbUsageMetrics:            struct{}{},
 	PerfMetrics:                    struct{}{},
+	ResctrlMetrics:                 struct{}{},
 }
 
 func (mk MetricKind) String() string {
