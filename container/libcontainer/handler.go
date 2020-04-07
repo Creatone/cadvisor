@@ -35,11 +35,13 @@ import (
 
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
+	"github.com/opencontainers/runc/libcontainer/intelrdt"
 	"k8s.io/klog/v2"
 )
 
 type Handler struct {
 	cgroupManager   cgroups.Manager
+	resctrlManager  intelrdt.IntelRdtManager
 	rootFs          string
 	pid             int
 	includedMetrics container.MetricSet
@@ -48,9 +50,10 @@ type Handler struct {
 
 var whitelistedUlimits = [...]string{"max_open_files"}
 
-func NewHandler(cgroupManager cgroups.Manager, rootFs string, pid int, includedMetrics container.MetricSet) *Handler {
+func NewHandler(cgroupManager cgroups.Manager, resctrlManager intelrdt.IntelRdtManager, rootFs string, pid int, includedMetrics container.MetricSet) *Handler {
 	return &Handler{
 		cgroupManager:   cgroupManager,
+		resctrlManager:  resctrlManager,
 		rootFs:          rootFs,
 		pid:             pid,
 		includedMetrics: includedMetrics,
@@ -151,6 +154,21 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 	// For backwards compatibility.
 	if len(stats.Network.Interfaces) > 0 {
 		stats.Network.InterfaceStats = stats.Network.Interfaces[0]
+	}
+
+	if h.includedMetrics.Has(container.ResctrlMetrics) {
+		resctrlStats, err := h.resctrlManager.GetStats()
+		if err != nil {
+			klog.V(4).Infof("Unable to get Resctrl stats: %v", err)
+		} else {
+			numberOfNUMANodes := len(*resctrlStats.MBMStats)
+			stats.Resctrl.MemoryBandwidthMonitoring = make([] info.MemoryBandwidthMonitoringStats, numberOfNUMANodes)
+			for index, numaNodeStats := range *resctrlStats.MBMStats {
+				stats.Resctrl.MemoryBandwidthMonitoring[index].TotalBytes = numaNodeStats.MBMTotalBytes
+				stats.Resctrl.MemoryBandwidthMonitoring[index].LocalBytes = numaNodeStats.MBMLocalBytes
+				stats.Resctrl.MemoryBandwidthMonitoring[index].LLCOccupancy = numaNodeStats.LLCOccupancy
+			}
+		}
 	}
 
 	return stats, nil
