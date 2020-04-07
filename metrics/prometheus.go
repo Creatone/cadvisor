@@ -17,6 +17,7 @@ package metrics
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/google/cadvisor/container"
@@ -1549,33 +1550,72 @@ func NewPrometheusCollector(i infoProvider, f ContainerLabelsFunc, includedMetri
 				name:      "container_mem_bandwidth_bytes",
 				help:      "Total memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
 				valueType: prometheus.GaugeValue,
+				extraLabels: []string{"numa_node"},
 				getValues: func(s *info.ContainerStats) metricValues {
-					return metricValues{{value: float64(s.Resctrl.MemoryBandwidthTotalBytes), timestamp: s.Timestamp}}
+					numberOfNUMANodes := len(s.Resctrl.MemoryBandwidthMonitoring)
+					metrics := make(metricValues, numberOfNUMANodes)
+					for numaNode, stats := range s.Resctrl.MemoryBandwidthMonitoring {
+						metrics[numaNode] = metricValue{
+							value: float64(stats.TotalBytes),
+							timestamp: s.Timestamp,
+							labels: []string{strconv.Itoa(numaNode)},
+						}
+					}
+					return metrics
 				},
 			},
 			{
 				name:      "container_mem_bandwidth_local_bytes",
 				help:      "Total local memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
 				valueType: prometheus.GaugeValue,
+				extraLabels: []string{"numa_node"},
 				getValues: func(s *info.ContainerStats) metricValues {
-					return metricValues{{value: float64(s.Resctrl.MemoryBandwidthLocalBytes), timestamp: s.Timestamp}}
+					numberOfNUMANodes := len(s.Resctrl.MemoryBandwidthMonitoring)
+					metrics := make(metricValues, numberOfNUMANodes)
+					for numaNode, stats := range s.Resctrl.MemoryBandwidthMonitoring {
+						metrics[numaNode] = metricValue{
+							value: float64(stats.LocalBytes),
+							timestamp: s.Timestamp,
+							labels: []string{strconv.Itoa(numaNode)},
+						}
+					}
+					return metrics
 				},
 			},
 			{
 				name:      "container_mem_bandwidth_remote_bytes",
 				help:      "Total remote memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
 				valueType: prometheus.GaugeValue,
+				extraLabels: []string{"numa_node"},
 				getValues: func(s *info.ContainerStats) metricValues {
-					remoteValue := s.Resctrl.MemoryBandwidthTotalBytes - s.Resctrl.MemoryBandwidthLocalBytes
-					return metricValues{{value: float64(remoteValue), timestamp: s.Timestamp}}
+					numberOfNUMANodes := len(s.Resctrl.MemoryBandwidthMonitoring)
+					metrics := make(metricValues, numberOfNUMANodes)
+					for numaNode, stats := range s.Resctrl.MemoryBandwidthMonitoring {
+						metrics[numaNode] = metricValue{
+							value: float64(stats.TotalBytes-stats.LocalBytes),
+							timestamp: s.Timestamp,
+							labels: []string{strconv.Itoa(numaNode)},
+						}
+					}
+					return metrics
 				},
 			},
 			{
 				name:      "container_llc_occupancy_bytes",
 				help:      "Total local memory bandwidth usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
 				valueType: prometheus.GaugeValue,
+				extraLabels: []string{"numa_node"},
 				getValues: func(s *info.ContainerStats) metricValues {
-					return metricValues{{value: float64(s.Resctrl.LLCOccupancy), timestamp: s.Timestamp}}
+					numberOfNUMANodes := len(s.Resctrl.MemoryBandwidthMonitoring)
+					metrics := make(metricValues, numberOfNUMANodes)
+					for numaNode, stats := range s.Resctrl.MemoryBandwidthMonitoring {
+						metrics[numaNode] = metricValue{
+							value: float64(stats.LLCOccupancy),
+							timestamp: s.Timestamp,
+							labels: []string{strconv.Itoa(numaNode)},
+						}
+					}
+					return metrics
 				},
 			},
 		}...)
