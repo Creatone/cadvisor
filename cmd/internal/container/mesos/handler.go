@@ -26,6 +26,7 @@ import (
 
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
+	resctrl "github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type mesosContainerHandler struct {
@@ -72,6 +73,19 @@ func newMesosContainerHandler(
 		Paths: cgroupPaths,
 	}
 
+	resctrlPath, err := resctrl.GetIntelRdtPath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	resctrlManager := resctrl.IntelRdtManager{
+		Config: &libcontainerconfigs.Config{
+			IntelRdt: &libcontainerconfigs.IntelRdt{},
+		},
+		Id:   name,
+		Path: resctrlPath,
+	}
+
 	rootFs := "/"
 	if !inHostNamespace {
 		rootFs = "/rootfs"
@@ -80,7 +94,6 @@ func newMesosContainerHandler(
 	id := ContainerNameToMesosId(name)
 
 	cinfo, err := client.ContainerInfo(id)
-
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +104,7 @@ func newMesosContainerHandler(
 		return nil, err
 	}
 
-	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, rootFs, pid, includedMetrics)
+	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, resctrlManager, rootFs, pid, includedMetrics)
 
 	reference := info.ContainerReference{
 		Id:        id,
