@@ -84,6 +84,21 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 		}
 	}
 
+	if h.includedMetrics.Has(container.ResctrlMetrics) {
+		resctrlStats, err := h.resctrlManager.GetStats()
+		if err != nil {
+			klog.V(4).Infof("Unable to get Resctrl stats: %v", err)
+		} else {
+			numberOfNUMANodes := len(*resctrlStats.MBMStats)
+			stats.Resctrl.MemoryBandwidthMonitoring = make([]info.MemoryBandwidthMonitoringStats, numberOfNUMANodes)
+			for index, numaNodeStats := range *resctrlStats.MBMStats {
+				stats.Resctrl.MemoryBandwidthMonitoring[index].TotalBytes = numaNodeStats.MBMTotalBytes
+				stats.Resctrl.MemoryBandwidthMonitoring[index].LocalBytes = numaNodeStats.MBMLocalBytes
+				stats.Resctrl.MemoryBandwidthMonitoring[index].LLCOccupancy = numaNodeStats.LLCOccupancy
+			}
+		}
+	}
+
 	// If we know the pid then get network stats from /proc/<pid>/net/dev
 	if h.pid == 0 {
 		return stats, nil
@@ -154,21 +169,6 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 	// For backwards compatibility.
 	if len(stats.Network.Interfaces) > 0 {
 		stats.Network.InterfaceStats = stats.Network.Interfaces[0]
-	}
-
-	if h.includedMetrics.Has(container.ResctrlMetrics) {
-		resctrlStats, err := h.resctrlManager.GetStats()
-		if err != nil {
-			klog.V(4).Infof("Unable to get Resctrl stats: %v", err)
-		} else {
-			numberOfNUMANodes := len(*resctrlStats.MBMStats)
-			stats.Resctrl.MemoryBandwidthMonitoring = make([] info.MemoryBandwidthMonitoringStats, numberOfNUMANodes)
-			for index, numaNodeStats := range *resctrlStats.MBMStats {
-				stats.Resctrl.MemoryBandwidthMonitoring[index].TotalBytes = numaNodeStats.MBMTotalBytes
-				stats.Resctrl.MemoryBandwidthMonitoring[index].LocalBytes = numaNodeStats.MBMLocalBytes
-				stats.Resctrl.MemoryBandwidthMonitoring[index].LLCOccupancy = numaNodeStats.LLCOccupancy
-			}
-		}
 	}
 
 	return stats, nil

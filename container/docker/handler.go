@@ -36,6 +36,8 @@ import (
 	docker "github.com/docker/docker/client"
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
+	resctrl "github.com/opencontainers/runc/libcontainer/intelrdt"
+
 	"golang.org/x/net/context"
 	"k8s.io/klog/v2"
 )
@@ -143,6 +145,19 @@ func newDockerContainerHandler(
 		Paths: cgroupPaths,
 	}
 
+	resctrlPath, err := resctrl.GetIntelRdtPath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	resctrlManager := resctrl.IntelRdtManager{
+		Config: &libcontainerconfigs.Config{
+			IntelRdt: &libcontainerconfigs.IntelRdt{},
+		},
+		Id:   name,
+		Path: resctrlPath,
+	}
+
 	rootFs := "/"
 	if !inHostNamespace {
 		rootFs = "/rootfs"
@@ -210,7 +225,7 @@ func newDockerContainerHandler(
 		// This should not happen, report the error just in case
 		return nil, fmt.Errorf("failed to parse the create timestamp %q for container %q: %v", ctnr.Created, id, err)
 	}
-	handler.libcontainerHandler = containerlibcontainer.NewHandler(cgroupManager, rootFs, ctnr.State.Pid, includedMetrics)
+	handler.libcontainerHandler = containerlibcontainer.NewHandler(cgroupManager, resctrlManager, rootFs, ctnr.State.Pid, includedMetrics)
 
 	// Add the name and bare ID as aliases of the container.
 	handler.reference = info.ContainerReference{
