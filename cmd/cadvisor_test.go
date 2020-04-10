@@ -86,6 +86,7 @@ func TestToIncludedMetrics(t *testing.T) {
 			container.AppMetrics:                     struct{}{},
 			container.HugetlbUsageMetrics:            struct{}{},
 			container.PerfMetrics:                    struct{}{},
+			container.ResctrlMetrics:                 struct{}{},
 		},
 		container.AllMetrics,
 		{},
