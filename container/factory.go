@@ -16,7 +16,6 @@ package container
 
 import (
 	"fmt"
-	"k8s.io/klog"
 	"sync"
 
 	"github.com/google/cadvisor/fs"
