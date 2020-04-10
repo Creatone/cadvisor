@@ -68,18 +68,20 @@ func newRawContainerHandler(name string, cgroupSubsystems *libcontainer.CgroupSu
 		Paths: cgroupPaths,
 	}
 
+	var resctrlManager *resctrl.IntelRdtManager
 	resctrlPath, err := resctrl.GetIntelRdtPath(name)
 	if err != nil {
-		return nil, err
+		klog.V(3).Infof("Cannot gather resctrl metrics: %v", err)
+	} else {
+		resctrlManager = &resctrl.IntelRdtManager{
+			Config: &configs.Config{
+				IntelRdt: &configs.IntelRdt{},
+			},
+			Id:   name,
+			Path: resctrlPath,
+		}
 	}
 
-	resctrlManager := resctrl.IntelRdtManager{
-		Config: &configs.Config{
-			IntelRdt: &configs.IntelRdt{},
-		},
-		Id:   name,
-		Path: resctrlPath,
-	}
 
 	var externalMounts []common.Mount
 	for _, container := range cHints.AllHosts {

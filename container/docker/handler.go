@@ -145,17 +145,18 @@ func newDockerContainerHandler(
 		Paths: cgroupPaths,
 	}
 
+	var resctrlManager *resctrl.IntelRdtManager
 	resctrlPath, err := resctrl.GetIntelRdtPath(name)
 	if err != nil {
-		return nil, err
-	}
-
-	resctrlManager := resctrl.IntelRdtManager{
-		Config: &libcontainerconfigs.Config{
-			IntelRdt: &libcontainerconfigs.IntelRdt{},
-		},
-		Id:   name,
-		Path: resctrlPath,
+		klog.V(4).Infof("Cannot gather resctrl metrics: %v", err)
+	} else {
+		resctrlManager = &resctrl.IntelRdtManager{
+			Config: &libcontainerconfigs.Config{
+				IntelRdt: &libcontainerconfigs.IntelRdt{},
+			},
+			Id:   name,
+			Path: resctrlPath,
+		}
 	}
 
 	rootFs := "/"

@@ -23,6 +23,7 @@ import (
 	containerlibcontainer "github.com/google/cadvisor/container/libcontainer"
 	"github.com/google/cadvisor/fs"
 	info "github.com/google/cadvisor/info/v1"
+	"k8s.io/klog"
 
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
@@ -73,17 +74,18 @@ func newMesosContainerHandler(
 		Paths: cgroupPaths,
 	}
 
+	var resctrlManager *resctrl.IntelRdtManager
 	resctrlPath, err := resctrl.GetIntelRdtPath(name)
 	if err != nil {
-		return nil, err
-	}
-
-	resctrlManager := resctrl.IntelRdtManager{
-		Config: &libcontainerconfigs.Config{
-			IntelRdt: &libcontainerconfigs.IntelRdt{},
-		},
-		Id:   name,
-		Path: resctrlPath,
+		klog.V(4).Infof("Cannot gather resctrl metrics: %v", err)
+	} else {
+		resctrlManager = &resctrl.IntelRdtManager{
+			Config: &libcontainerconfigs.Config{
+				IntelRdt: &libcontainerconfigs.IntelRdt{},
+			},
+			Id:   name,
+			Path: resctrlPath,
+		}
 	}
 
 	rootFs := "/"
