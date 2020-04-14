@@ -13,15 +13,17 @@ type collector struct {
 }
 
 func newCollector(id string, resctrlPath string) *collector {
-	resctrlManager := intelrdt.IntelRdtManager{
-		Config: &configs.Config{
-			IntelRdt: &configs.IntelRdt{},
+	collector := &collector{
+		resctrlManager: intelrdt.IntelRdtManager{
+			Config: &configs.Config{
+				IntelRdt: &configs.IntelRdt{},
+			},
+			Id:   id,
+			Path: resctrlPath,
 		},
-		Id:   id,
-		Path: resctrlPath,
 	}
 
-	return &collector{resctrlManager: resctrlManager}
+	return collector
 }
 
 func (c *collector) UpdateStats(stats *info.ContainerStats) error {
