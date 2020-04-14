@@ -26,8 +26,6 @@ import (
 	"github.com/google/cadvisor/machine"
 
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
-	resctrl "github.com/opencontainers/runc/libcontainer/intelrdt"
-
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"k8s.io/klog/v2"
 )
@@ -68,21 +66,6 @@ func newRawContainerHandler(name string, cgroupSubsystems *libcontainer.CgroupSu
 		Paths: cgroupPaths,
 	}
 
-	var resctrlManager *resctrl.IntelRdtManager
-	resctrlPath, err := resctrl.GetIntelRdtPath(name)
-	if err != nil {
-		klog.V(3).Infof("Cannot gather resctrl metrics: %v", err)
-	} else {
-		resctrlManager = &resctrl.IntelRdtManager{
-			Config: &configs.Config{
-				IntelRdt: &configs.IntelRdt{},
-			},
-			Id:   name,
-			Path: resctrlPath,
-		}
-	}
-
-
 	var externalMounts []common.Mount
 	for _, container := range cHints.AllHosts {
 		if name == container.FullName {
@@ -99,7 +82,7 @@ func newRawContainerHandler(name string, cgroupSubsystems *libcontainer.CgroupSu
 		delete(cgroupPaths, "pids")
 	}
 
-	handler := libcontainer.NewHandler(cgroupManager, resctrlManager, rootFs, pid, includedMetrics)
+	handler := libcontainer.NewHandler(cgroupManager, rootFs, pid, includedMetrics)
 
 	return &rawContainerHandler{
 		name:                name,
@@ -247,7 +230,6 @@ func (self *rawContainerHandler) GetStats() (*info.ContainerStats, error) {
 	if *disableRootCgroupStats && isRootCgroup(self.name) {
 		return nil, nil
 	}
-
 	stats, err := self.libcontainerHandler.GetStats()
 	if err != nil {
 		return stats, err

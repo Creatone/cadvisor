@@ -25,14 +25,12 @@ import (
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
 	"golang.org/x/net/context"
-	"k8s.io/klog"
 
 	"github.com/google/cadvisor/container"
 	"github.com/google/cadvisor/container/common"
 	containerlibcontainer "github.com/google/cadvisor/container/libcontainer"
 	"github.com/google/cadvisor/fs"
 	info "github.com/google/cadvisor/info/v1"
-	resctrl "github.com/opencontainers/runc/libcontainer/intelrdt"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -76,20 +74,6 @@ func newContainerdContainerHandler(
 			Name: name,
 		},
 		Paths: cgroupPaths,
-	}
-
-	var resctrlManager *resctrl.IntelRdtManager
-	resctrlPath, err := resctrl.GetIntelRdtPath(name)
-	if err != nil {
-		klog.V(4).Infof("Cannot gather resctrl metrics: %v", err)
-	} else {
-		resctrlManager = &resctrl.IntelRdtManager{
-			Config: &libcontainerconfigs.Config{
-				IntelRdt: &libcontainerconfigs.IntelRdt{},
-			},
-			Id:   name,
-			Path: resctrlPath,
-		}
 	}
 
 	id := ContainerNameToContainerdID(name)
@@ -139,7 +123,7 @@ func newContainerdContainerHandler(
 		Aliases:   []string{id, name},
 	}
 
-	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, resctrlManager, rootfs, int(taskPid), includedMetrics)
+	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, rootfs, int(taskPid), includedMetrics)
 
 	handler := &containerdContainerHandler{
 		machineInfoFactory:  machineInfoFactory,

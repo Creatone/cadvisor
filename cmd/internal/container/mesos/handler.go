@@ -23,11 +23,9 @@ import (
 	containerlibcontainer "github.com/google/cadvisor/container/libcontainer"
 	"github.com/google/cadvisor/fs"
 	info "github.com/google/cadvisor/info/v1"
-	"k8s.io/klog"
 
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
-	resctrl "github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type mesosContainerHandler struct {
@@ -74,20 +72,6 @@ func newMesosContainerHandler(
 		Paths: cgroupPaths,
 	}
 
-	var resctrlManager *resctrl.IntelRdtManager
-	resctrlPath, err := resctrl.GetIntelRdtPath(name)
-	if err != nil {
-		klog.V(4).Infof("Cannot gather resctrl metrics: %v", err)
-	} else {
-		resctrlManager = &resctrl.IntelRdtManager{
-			Config: &libcontainerconfigs.Config{
-				IntelRdt: &libcontainerconfigs.IntelRdt{},
-			},
-			Id:   name,
-			Path: resctrlPath,
-		}
-	}
-
 	rootFs := "/"
 	if !inHostNamespace {
 		rootFs = "/rootfs"
@@ -96,6 +80,7 @@ func newMesosContainerHandler(
 	id := ContainerNameToMesosId(name)
 
 	cinfo, err := client.ContainerInfo(id)
+
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +91,7 @@ func newMesosContainerHandler(
 		return nil, err
 	}
 
-	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, resctrlManager, rootFs, pid, includedMetrics)
+	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, rootFs, pid, includedMetrics)
 
 	reference := info.ContainerReference{
 		Id:        id,

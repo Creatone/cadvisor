@@ -27,11 +27,9 @@ import (
 	containerlibcontainer "github.com/google/cadvisor/container/libcontainer"
 	"github.com/google/cadvisor/fs"
 	info "github.com/google/cadvisor/info/v1"
-	"k8s.io/klog"
 
 	cgroupfs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	libcontainerconfigs "github.com/opencontainers/runc/libcontainer/configs"
-	resctrl "github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type crioContainerHandler struct {
@@ -74,7 +72,6 @@ type crioContainerHandler struct {
 
 	libcontainerHandler *containerlibcontainer.Handler
 	cgroupManager       *cgroupfs.Manager
-	resctrlManager      *resctrl.IntelRdtManager
 	rootFs              string
 	pidKnown            bool
 }
@@ -103,20 +100,6 @@ func newCrioContainerHandler(
 			Name: name,
 		},
 		Paths: cgroupPaths,
-	}
-
-	var resctrlManager *resctrl.IntelRdtManager
-	resctrlPath, err := resctrl.GetIntelRdtPath(name)
-	if err != nil {
-		klog.V(4).Infof("Cannot gather resctrl metrics: %v", err)
-	} else {
-		resctrlManager = &resctrl.IntelRdtManager{
-			Config: &libcontainerconfigs.Config{
-				IntelRdt: &libcontainerconfigs.IntelRdt{},
-			},
-			Id:   name,
-			Path: resctrlPath,
-		}
 	}
 
 	rootFs := "/"
@@ -170,7 +153,7 @@ func newCrioContainerHandler(
 		Namespace: CrioNamespace,
 	}
 
-	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, resctrlManager, rootFs, cInfo.Pid, includedMetrics)
+	libcontainerHandler := containerlibcontainer.NewHandler(cgroupManager, rootFs, cInfo.Pid, includedMetrics)
 
 	// TODO: extract object mother method
 	handler := &crioContainerHandler{
@@ -316,7 +299,7 @@ func (self *crioContainerHandler) getLibcontainerHandler() *containerlibcontaine
 	}
 
 	self.pidKnown = true
-	self.libcontainerHandler = containerlibcontainer.NewHandler(self.cgroupManager, self.resctrlManager, self.rootFs, cInfo.Pid, self.includedMetrics)
+	self.libcontainerHandler = containerlibcontainer.NewHandler(self.cgroupManager, self.rootFs, cInfo.Pid, self.includedMetrics)
 
 	return self.libcontainerHandler
 }
