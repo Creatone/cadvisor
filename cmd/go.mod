@@ -27,6 +27,7 @@ require (
 	github.com/onsi/ginkgo v1.10.3 // indirect
 	github.com/onsi/gomega v1.7.1 // indirect
 	github.com/opencontainers/runc v1.0.0-rc10
+	github.com/opencontainers/selinux v1.5.1 // indirect
 	github.com/pquerna/ffjson v0.0.0-20171002144729-d49c2bc1aa13 // indirect
 	github.com/prometheus/client_golang v1.0.0
 	github.com/stretchr/testify v1.4.0
@@ -35,4 +36,7 @@ require (
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/olivere/elastic.v2 v2.0.12
 	k8s.io/klog v0.3.0
+	k8s.io/klog/v2 v2.0.0
 )
+
+replace github.com/opencontainers/runc => github.com/creatone/runc v1.0.0-rc11
