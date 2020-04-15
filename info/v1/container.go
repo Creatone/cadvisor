@@ -880,9 +880,6 @@ type MemoryBandwidthMonitoringStats struct {
 
 	// The 'mbm_local_bytes'.
 	LocalBytes uint64 `json:"mbm_local_bytes,omitempty"`
-
-	// The 'llc_occupancy'.
-	LLCOccupancy uint64 `json:"llc_occupancy,omitempty"`
 }
 
 type ResctrlStats struct {

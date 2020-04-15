@@ -375,14 +375,12 @@ func (p testSubcontainersInfoProvider) SubcontainersInfo(string, *info.Container
 					Resctrl: info.ResctrlStats{
 						MemoryBandwidthMonitoring: []info.MemoryBandwidthMonitoringStats{
 							{
-								TotalBytes:   4512312,
-								LocalBytes:   2390393,
-								LLCOccupancy: 162626,
+								TotalBytes: 4512312,
+								LocalBytes: 2390393,
 							},
 							{
-								TotalBytes:   2173713,
-								LocalBytes:   1231233,
-								LLCOccupancy: 213777,
+								TotalBytes: 2173713,
+								LocalBytes: 1231233,
 							},
 						},
 					},

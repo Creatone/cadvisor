@@ -59,9 +59,8 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 	for _, numaNodeStats := range *resctrlStats.MBMStats {
 		stats.Resctrl.MemoryBandwidthMonitoring = append(stats.Resctrl.MemoryBandwidthMonitoring,
 			info.MemoryBandwidthMonitoringStats{
-				TotalBytes:   numaNodeStats.MBMTotalBytes,
-				LocalBytes:   numaNodeStats.MBMLocalBytes,
-				LLCOccupancy: numaNodeStats.LLCOccupancy,
+				TotalBytes: numaNodeStats.MBMTotalBytes,
+				LocalBytes: numaNodeStats.MBMLocalBytes,
 			})
 	}
 
