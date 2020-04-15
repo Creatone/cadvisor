@@ -25,13 +25,13 @@ import (
 )
 
 type collector struct {
-	resctrlManager intelrdt.IntelRdtManager
+	resctrl intelrdt.IntelRdtManager
 	stats.NoopDestroy
 }
 
 func newCollector(id string, resctrlPath string) *collector {
 	collector := &collector{
-		resctrlManager: intelrdt.IntelRdtManager{
+		resctrl: intelrdt.IntelRdtManager{
 			Config: &configs.Config{
 				IntelRdt: &configs.IntelRdt{},
 			},
@@ -46,7 +46,7 @@ func newCollector(id string, resctrlPath string) *collector {
 func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 	stats.Resctrl = info.ResctrlStats{}
 
-	resctrlStats, err := c.resctrlManager.GetStats()
+	resctrlStats, err := c.resctrl.GetStats()
 	if err != nil {
 		return err
 	}
