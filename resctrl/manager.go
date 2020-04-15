@@ -19,6 +19,7 @@ package resctrl
 
 import (
 	"github.com/google/cadvisor/stats"
+	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type manager struct {
@@ -32,5 +33,10 @@ func (m manager) GetCollector(resctrlPath string) (stats.Collector, error) {
 }
 
 func NewManager(id string) (stats.Manager, error) {
-	return &manager{id: id}, nil
+
+	if intelrdt.IsMbmEnabled() {
+		return &manager{id: id}, nil
+	}
+
+	return &stats.NoopManager{}, nil
 }
