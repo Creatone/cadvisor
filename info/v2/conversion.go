@@ -154,6 +154,10 @@ func ContainerStatsFromV1(containerName string, spec *v1.ContainerSpec, stats []
 		if len(val.PerfStats) > 0 {
 			stat.PerfStats = val.PerfStats
 		}
+		if len(val.Resctrl.MemoryBandwidthMonitoring) > 0 {
+			stat.Resctrl.MemoryBandwidthMonitoring = val.Resctrl.MemoryBandwidthMonitoring
+		}
+
 		// TODO(rjnagal): Handle load stats.
 		newStats = append(newStats, stat)
 	}
@@ -201,6 +205,7 @@ func DeprecatedStatsFromV1(cont *v1.ContainerInfo) []DeprecatedContainerStats {
 		if stat.HasCustomMetrics {
 			stat.CustomMetrics = val.CustomMetrics
 		}
+
 		// TODO(rjnagal): Handle load stats.
 		stats = append(stats, stat)
 	}
