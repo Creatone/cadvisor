@@ -19,6 +19,7 @@ package resctrl
 
 import (
 	"github.com/google/cadvisor/stats"
+
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
