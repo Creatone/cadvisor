@@ -18,7 +18,6 @@ package manager
 import (
 	"flag"
 	"fmt"
-	"github.com/google/cadvisor/resctrl"
 	"net/http"
 	"os"
 	"path"
@@ -40,6 +39,7 @@ import (
 	"github.com/google/cadvisor/machine"
 	"github.com/google/cadvisor/nvm"
 	"github.com/google/cadvisor/perf"
+	"github.com/google/cadvisor/resctrl"
 	"github.com/google/cadvisor/stats"
 	"github.com/google/cadvisor/utils/oomparser"
 	"github.com/google/cadvisor/utils/sysfs"
