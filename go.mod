@@ -11,14 +11,12 @@ require (
 	github.com/containerd/containerd v1.3.3
 	github.com/containerd/ttrpc v1.0.0 // indirect
 	github.com/containerd/typeurl v1.0.0
-	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e // indirect
 	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible // indirect
 	github.com/docker/docker v0.7.3-0.20190327010347-be7ac8be2ae0
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/go-units v0.4.0
 	github.com/euank/go-kmsg-parser v2.0.0+incompatible
 	github.com/go-ini/ini v1.9.0 // indirect
-	github.com/godbus/dbus v0.0.0-20190422162347-ade71ed3457e // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/google/go-cmp v0.3.1
 	github.com/google/uuid v1.1.1 // indirect
@@ -54,4 +52,4 @@ require (
 	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
 )
 
-replace github.com/opencontainers/runc => github.com/creatone/runc v1.0.0-rc11
+replace github.com/opencontainers/runc => github.com/creatone/runc v1.0.0-rc13
