@@ -219,6 +219,14 @@ func TestContainerStatsFromV1(t *testing.T) {
 					LocalBytes: 2233311,
 				},
 			},
+			CacheMonitoringTechnology: []v1.CacheMonitoringTechnologyStats{
+				{
+					LLCOccupancy: 123123441,
+				},
+				{
+					LLCOccupancy: 123313111,
+				},
+			},
 		},
 	}
 
