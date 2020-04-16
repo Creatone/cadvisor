@@ -383,6 +383,14 @@ func (p testSubcontainersInfoProvider) SubcontainersInfo(string, *info.Container
 								LocalBytes: 1231233,
 							},
 						},
+						CacheMonitoringTechnology: []info.CacheMonitoringTechnologyStats{
+							{
+								LLCOccupancy: 162626,
+							},
+							{
+								LLCOccupancy: 213777,
+							},
+						},
 					},
 					TaskStats: info.LoadStats{
 						NrSleeping:        50,

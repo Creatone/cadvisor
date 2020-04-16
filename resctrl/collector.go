@@ -55,6 +55,7 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 	numberOfNUMANodes := len(*resctrlStats.MBMStats)
 
 	stats.Resctrl.MemoryBandwidthMonitoring = make([]info.MemoryBandwidthMonitoringStats, 0, numberOfNUMANodes)
+	stats.Resctrl.CacheMonitoringTechnology = make([]info.CacheMonitoringTechnologyStats, 0, numberOfNUMANodes)
 
 	for _, numaNodeStats := range *resctrlStats.MBMStats {
 		stats.Resctrl.MemoryBandwidthMonitoring = append(stats.Resctrl.MemoryBandwidthMonitoring,
@@ -62,6 +63,11 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 				TotalBytes: numaNodeStats.MBMTotalBytes,
 				LocalBytes: numaNodeStats.MBMLocalBytes,
 			})
+	}
+
+	for _, numaNodeStats := range *resctrlStats.CMTStats {
+		stats.Resctrl.CacheMonitoringTechnology = append(stats.Resctrl.CacheMonitoringTechnology,
+			info.CacheMonitoringTechnologyStats{LLCOccupancy: numaNodeStats.LLCOccupancy})
 	}
 
 	return nil

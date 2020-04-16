@@ -1600,6 +1600,24 @@ func NewPrometheusCollector(i infoProvider, f ContainerLabelsFunc, includedMetri
 					return metrics
 				},
 			},
+			{
+				name:        "container_llc_occupancy_bytes",
+				help:        "Last level cache usage statistics for container counted with RDT Memory Bandwidth Monitoring (MBM).",
+				valueType:   prometheus.GaugeValue,
+				extraLabels: []string{"numa_node"},
+				getValues: func(s *info.ContainerStats) metricValues {
+					numberOfNUMANodes := len(s.Resctrl.MemoryBandwidthMonitoring)
+					metrics := make(metricValues, numberOfNUMANodes)
+					for numaNode, stats := range s.Resctrl.CacheMonitoringTechnology {
+						metrics[numaNode] = metricValue{
+							value:     float64(stats.LLCOccupancy),
+							timestamp: s.Timestamp,
+							labels:    []string{strconv.Itoa(numaNode)},
+						}
+					}
+					return metrics
+				},
+			},
 		}...)
 	}
 	return c

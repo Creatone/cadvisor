@@ -35,7 +35,7 @@ func (m manager) GetCollector(resctrlPath string) (stats.Collector, error) {
 
 func NewManager(id string) (stats.Manager, error) {
 
-	if intelrdt.IsMbmEnabled() {
+	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
 		return &manager{id: id}, nil
 	}
 

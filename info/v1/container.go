@@ -882,9 +882,15 @@ type MemoryBandwidthMonitoringStats struct {
 	LocalBytes uint64 `json:"mbm_local_bytes,omitempty"`
 }
 
+type CacheMonitoringTechnologyStats struct {
+	// The 'llc_occupancy'.
+	LLCOccupancy uint64 `json:"llc_occupancy,omitempty"`
+}
+
 type ResctrlStats struct {
-	// Each NUMA Node memory bandwidth statistics corresponds to one element in the array.
+	// Each NUMA Node statistics corresponds to one element in the array.
 	MemoryBandwidthMonitoring []MemoryBandwidthMonitoringStats `json:"memory_bandwidth_monitoring,omitempty"`
+	CacheMonitoringTechnology []CacheMonitoringTechnologyStats `json:"cache_monitoring_technology,omitempty"`
 }
 
 type ContainerStats struct {
