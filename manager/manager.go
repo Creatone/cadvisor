@@ -800,8 +800,7 @@ func (self *manager) GetFsInfo(label string) ([]v2.FsInfo, error) {
 func (m *manager) GetMachineInfo() (*info.MachineInfo, error) {
 	m.machineMu.RLock()
 	defer m.machineMu.RUnlock()
-	// Copy and return the MachineInfo.
-	return &m.machineInfo, nil
+	return m.machineInfo.Clone(), nil
 }
 
 func (m *manager) GetVersionInfo() (*info.VersionInfo, error) {
