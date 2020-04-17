@@ -1606,7 +1606,7 @@ func NewPrometheusCollector(i infoProvider, f ContainerLabelsFunc, includedMetri
 				valueType:   prometheus.GaugeValue,
 				extraLabels: []string{"numa_node"},
 				getValues: func(s *info.ContainerStats) metricValues {
-					numberOfNUMANodes := len(s.Resctrl.MemoryBandwidthMonitoring)
+					numberOfNUMANodes := len(s.Resctrl.CacheMonitoringTechnology)
 					metrics := make(metricValues, numberOfNUMANodes)
 					for numaNode, stats := range s.Resctrl.CacheMonitoringTechnology {
 						metrics[numaNode] = metricValue{
