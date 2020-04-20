@@ -1,4 +1,4 @@
-// +build !libpfm !cgo
+// +build linux
 
 // Copyright 2020 Google Inc. All Rights Reserved.
 //
@@ -14,20 +14,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Collector of perf events for a container.
-package perf
+// Manager of resctrl for containers.
+package resctrl
 
 import (
 	"github.com/google/cadvisor/stats"
 
-	"k8s.io/klog/v2"
+	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
-func NewCollector(cgroupPath string, events Events, numCores int) stats.Collector {
-	return &stats.NoopCollector{}
+type manager struct {
+	id string
+	stats.NoopDestroy
 }
 
-// Finalize terminates libpfm4 to free resources.
-func Finalize() {
-	klog.V(1).Info("cAdvisor is build without cgo and/or libpfm support. Nothing to be finalized")
+func (m manager) GetCollector(resctrlPath string) (stats.Collector, error) {
+	collector := newCollector(m.id, resctrlPath)
+	return collector, nil
+}
+
+func NewManager(id string) (stats.Manager, error) {
+
+	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
+		return &manager{id: id}, nil
+	}
+
+	return &stats.NoopManager{}, nil
 }

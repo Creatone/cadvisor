@@ -94,6 +94,9 @@ type containerData struct {
 
 	// perfCollector updates stats for perf_event cgroup controller.
 	perfCollector stats.Collector
+
+	// resctrlCollector updates stats for resctrl controller.
+	resctrlCollector stats.Collector
 }
 
 // jitter returns a time.Duration between duration and duration + maxFactor * duration,
@@ -172,10 +175,17 @@ func (c *containerData) GetInfo(shouldUpdateSubcontainers bool) (*containerInfo,
 		}
 		c.infoLastUpdatedTime = c.clock.Now()
 	}
-	// Make a copy of the info for the user.
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	return &c.info, nil
+	cInfo := containerInfo{
+		Subcontainers: c.info.Subcontainers,
+		Spec:          c.info.Spec,
+	}
+	cInfo.Id = c.info.Id
+	cInfo.Name = c.info.Name
+	cInfo.Aliases = c.info.Aliases
+	cInfo.Namespace = c.info.Namespace
+	return &cInfo, nil
 }
 
 func (c *containerData) DerivedStats() (v2.DerivedStats, error) {
@@ -393,6 +403,7 @@ func newContainerData(containerName string, memoryCache *memory.InMemoryCache, h
 		clock:                    clock,
 		perfCollector:            &stats.NoopCollector{},
 		nvidiaCollector:          &stats.NoopCollector{},
+		resctrlCollector:         &stats.NoopCollector{},
 	}
 	cont.info.ContainerReference = ref
 
@@ -634,6 +645,8 @@ func (c *containerData) updateStats() error {
 
 	perfStatsErr := c.perfCollector.UpdateStats(stats)
 
+	resctrlStatsErr := c.resctrlCollector.UpdateStats(stats)
+
 	ref, err := c.handler.ContainerReference()
 	if err != nil {
 		// Ignore errors if the container is dead.
@@ -662,6 +675,11 @@ func (c *containerData) updateStats() error {
 		klog.Errorf("error occurred while collecting perf stats for container %s: %s", cInfo.Name, err)
 		return perfStatsErr
 	}
+	if resctrlStatsErr != nil {
+		klog.Errorf("error occurred while collecting resctrl stats for container %s: %s", cInfo.Name, err)
+		return resctrlStatsErr
+	}
+
 	return customStatsErr
 }
 

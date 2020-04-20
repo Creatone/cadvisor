@@ -874,6 +874,25 @@ type ProcessStats struct {
 	Ulimits []UlimitSpec `json:"ulimits,omitempty"`
 }
 
+type MemoryBandwidthMonitoringStats struct {
+	// The 'mbm_total_bytes'.
+	TotalBytes uint64 `json:"mbm_total_bytes,omitempty"`
+
+	// The 'mbm_local_bytes'.
+	LocalBytes uint64 `json:"mbm_local_bytes,omitempty"`
+}
+
+type CacheMonitoringTechnologyStats struct {
+	// The 'llc_occupancy'.
+	LLCOccupancy uint64 `json:"llc_occupancy,omitempty"`
+}
+
+type ResctrlStats struct {
+	// Each NUMA Node statistics corresponds to one element in the array.
+	MemoryBandwidthMonitoring []MemoryBandwidthMonitoringStats `json:"memory_bandwidth_monitoring,omitempty"`
+	CacheMonitoringTechnology []CacheMonitoringTechnologyStats `json:"cache_monitoring_technology,omitempty"`
+}
+
 type ContainerStats struct {
 	// The time of this stat point.
 	Timestamp time.Time               `json:"timestamp"`
@@ -882,6 +901,10 @@ type ContainerStats struct {
 	Memory    MemoryStats             `json:"memory,omitempty"`
 	Hugetlb   map[string]HugetlbStats `json:"hugetlb,omitempty"`
 	Network   NetworkStats            `json:"network,omitempty"`
+
+	// Resource Control (resctrl) statistics.
+	Resctrl ResctrlStats `json:"resctrl,omitempty"`
+
 	// Filesystem statistics
 	Filesystem []FsStats `json:"filesystem,omitempty"`
 

@@ -166,6 +166,8 @@ type ContainerStats struct {
 	CustomMetrics map[string][]v1.MetricVal `json:"custom_metrics,omitempty"`
 	// Perf events counters
 	PerfStats []v1.PerfStat `json:"perf_stats,omitempty"`
+	// Resource Control (resctrl) statistics.
+	Resctrl v1.ResctrlStats `json:"resctrl,omitempty"`
 }
 
 type Percentiles struct {

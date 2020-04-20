@@ -372,6 +372,26 @@ func (p testSubcontainersInfoProvider) SubcontainersInfo(string, *info.Container
 							},
 						},
 					},
+					Resctrl: info.ResctrlStats{
+						MemoryBandwidthMonitoring: []info.MemoryBandwidthMonitoringStats{
+							{
+								TotalBytes: 4512312,
+								LocalBytes: 2390393,
+							},
+							{
+								TotalBytes: 2173713,
+								LocalBytes: 1231233,
+							},
+						},
+						CacheMonitoringTechnology: []info.CacheMonitoringTechnologyStats{
+							{
+								LLCOccupancy: 162626,
+							},
+							{
+								LLCOccupancy: 213777,
+							},
+						},
+					},
 					TaskStats: info.LoadStats{
 						NrSleeping:        50,
 						NrRunning:         51,
@@ -409,6 +429,32 @@ func (p testSubcontainersInfoProvider) SubcontainersInfo(string, *info.Container
 								Label:      "testlabel3",
 								Labels:     map[string]string{"test_label": "test_value"},
 							},
+						},
+					},
+					PerfStats: []info.PerfStat{
+						{
+							ScalingRatio: 1.0,
+							Value:        123,
+							Name:         "instructions",
+							Cpu:          0,
+						},
+						{
+							ScalingRatio: 0.5,
+							Value:        456,
+							Name:         "instructions",
+							Cpu:          1,
+						},
+						{
+							ScalingRatio: 0.66666666666,
+							Value:        321,
+							Name:         "instructions_retired",
+							Cpu:          0,
+						},
+						{
+							ScalingRatio: 0.33333333333,
+							Value:        789,
+							Name:         "instructions_retired",
+							Cpu:          1,
 						},
 					},
 				},

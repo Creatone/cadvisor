@@ -208,7 +208,28 @@ func TestContainerStatsFromV1(t *testing.T) {
 				Name:         "cycles",
 			},
 		},
+		Resctrl: v1.ResctrlStats{
+			MemoryBandwidthMonitoring: []v1.MemoryBandwidthMonitoringStats{
+				{
+					TotalBytes: 72312331,
+					LocalBytes: 1233311,
+				},
+				{
+					TotalBytes: 32312331,
+					LocalBytes: 2233311,
+				},
+			},
+			CacheMonitoringTechnology: []v1.CacheMonitoringTechnologyStats{
+				{
+					LLCOccupancy: 123123441,
+				},
+				{
+					LLCOccupancy: 123313111,
+				},
+			},
+		},
 	}
+
 	expectedV2Stats := ContainerStats{
 		Timestamp: timestamp,
 		Cpu:       &v1Stats.Cpu,
@@ -226,6 +247,7 @@ func TestContainerStatsFromV1(t *testing.T) {
 		},
 		Accelerators: v1Stats.Accelerators,
 		PerfStats:    v1Stats.PerfStats,
+		Resctrl:      v1Stats.Resctrl,
 	}
 
 	v2Stats := ContainerStatsFromV1("test", &v1Spec, []*v1.ContainerStats{&v1Stats})
