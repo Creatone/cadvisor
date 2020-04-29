@@ -34,8 +34,17 @@ func TestConfigParsing(t *testing.T) {
 	assert.Len(t, events.Events[1], 1)
 	assert.Equal(t, Event("instructions_retired"), events.Events[1][0])
 
-	assert.Len(t, events.CustomEvents, 1)
+	assert.Len(t, events.UncoreEvents.MemoryController, 2)
+	assert.Len(t, events.UncoreEvents.MemoryController[0], 1)
+	assert.Equal(t, Event("cas_count_write"), events.UncoreEvents.MemoryController[0][0])
+	assert.Len(t, events.UncoreEvents.MemoryController[1], 1)
+	assert.Equal(t, Event("UNC_M_CAS_COUNT:RD"), events.UncoreEvents.MemoryController[1][0])
+
+	assert.Len(t, events.CustomEvents, 2)
 	assert.Equal(t, Config{5439680}, events.CustomEvents[0].Config)
 	assert.Equal(t, uint32(4), events.CustomEvents[0].Type)
 	assert.Equal(t, Event("instructions_retired"), events.CustomEvents[0].Name)
+	assert.Equal(t, Config{0xc04}, events.CustomEvents[1].Config)
+	assert.Equal(t, uint32(0), events.CustomEvents[1].Type)
+	assert.Equal(t, Event("cas_count_write"), events.CustomEvents[1].Name)
 }

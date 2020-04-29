@@ -846,6 +846,9 @@ type PerfStat struct {
 
 	// CPU that perf event was measured on.
 	Cpu int `json:"cpu"`
+
+	// Type is type of an event.
+	Type uint32 `json:"type"`
 }
 
 type UlimitSpec struct {

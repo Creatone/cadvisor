@@ -39,7 +39,7 @@ import (
 type collector struct {
 	cgroupPath         string
 	events             Events
-	cpuFiles           map[string]map[int]readerCloser
+	cpuFiles           map[string]map[uint32]map[int]readerCloser
 	cpuFilesLock       sync.Mutex
 	numCores           int
 	eventToCustomEvent map[Event]*CustomEvent
@@ -62,7 +62,7 @@ func init() {
 }
 
 func newCollector(cgroupPath string, events Events, numCores int) *collector {
-	collector := &collector{cgroupPath: cgroupPath, events: events, cpuFiles: map[string]map[int]readerCloser{}, numCores: numCores}
+	collector := &collector{cgroupPath: cgroupPath, events: events, cpuFiles: map[string]map[uint32]map[int]readerCloser{}, numCores: numCores}
 	mapEventsToCustomEvents(collector)
 	return collector
 }
@@ -73,33 +73,36 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 
 	stats.PerfStats = []info.PerfStat{}
 	klog.V(5).Infof("Attempting to update perf_event stats from cgroup %q", c.cgroupPath)
-	for name, files := range c.cpuFiles {
-		for cpu, file := range files {
-			buf := make([]byte, 32)
-			_, err := file.Read(buf)
-			if err != nil {
-				klog.Warningf("Unable to read from perf_event file (event: %q, CPU: %d) for %q", name, cpu, c.cgroupPath)
-				continue
+	for name, pmus := range c.cpuFiles {
+		for pmu, files := range pmus {
+			for cpu, file := range files {
+				buf := make([]byte, 32)
+				_, err := file.Read(buf)
+				if err != nil {
+					klog.Warningf("Unable to read from perf_event file (event: %q, CPU: %d) for %q", name, cpu, c.cgroupPath)
+					continue
+				}
+				perfData := &ReadFormat{}
+				reader := bytes.NewReader(buf)
+				err = binary.Read(reader, binary.LittleEndian, perfData)
+				if err != nil {
+					klog.Warningf("Unable to decode from binary format read from perf_event file (event: %q, CPU: %d) for %q", name, cpu, c.cgroupPath)
+					continue
+				}
+				klog.V(5).Infof("Read metric for event %q for cpu %d from cgroup %q: %d", name, cpu, c.cgroupPath, perfData.Value)
+				scalingRatio := 1.0
+				if perfData.TimeEnabled != 0 {
+					scalingRatio = float64(perfData.TimeRunning) / float64(perfData.TimeEnabled)
+				}
+				stat := info.PerfStat{
+					Value:        uint64(float64(perfData.Value) / scalingRatio),
+					Name:         name,
+					ScalingRatio: scalingRatio,
+					Cpu:          cpu,
+					Type:         pmu,
+				}
+				stats.PerfStats = append(stats.PerfStats, stat)
 			}
-			perfData := &ReadFormat{}
-			reader := bytes.NewReader(buf)
-			err = binary.Read(reader, binary.LittleEndian, perfData)
-			if err != nil {
-				klog.Warningf("Unable to decode from binary format read from perf_event file (event: %q, CPU: %d) for %q", name, cpu, c.cgroupPath)
-				continue
-			}
-			klog.V(5).Infof("Read metric for event %q for cpu %d from cgroup %q: %d", name, cpu, c.cgroupPath, perfData.Value)
-			scalingRatio := 1.0
-			if perfData.TimeEnabled != 0 {
-				scalingRatio = float64(perfData.TimeRunning) / float64(perfData.TimeEnabled)
-			}
-			stat := info.PerfStat{
-				Value:        uint64(float64(perfData.Value) / scalingRatio),
-				Name:         name,
-				ScalingRatio: scalingRatio,
-				Cpu:          cpu,
-			}
-			stats.PerfStats = append(stats.PerfStats, stat)
 		}
 	}
 	return nil
@@ -127,6 +130,20 @@ func (c *collector) setup() error {
 			return err
 		}
 	}
+
+	for _, group := range c.events.UncoreEvents.MemoryController {
+		customEvent, ok := c.eventToCustomEvent[group[0]]
+		var err error
+		if ok {
+			err = c.setupRawNonGroupedUncoreMemoryController(customEvent, cgroupFd)
+		} else {
+			err = c.setupNonGroupedUncoreMemoryController(string(group[0]), cgroupFd)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -141,10 +158,10 @@ func (c *collector) setupRawNonGrouped(event *CustomEvent, cgroup int) error {
 	return nil
 }
 
-func (c *collector) registerEvent(config *unix.PerfEventAttr, name string, cgroup int) error {
+func (c *collector) registerEvent(config *unix.PerfEventAttr, name string, pid int) error {
 	var cpu int
 	for cpu = 0; cpu < c.numCores; cpu++ {
-		pid, groupFd, flags := cgroup, -1, unix.PERF_FLAG_FD_CLOEXEC|unix.PERF_FLAG_PID_CGROUP
+		groupFd, flags := -1, unix.PERF_FLAG_FD_CLOEXEC|unix.PERF_FLAG_PID_CGROUP
 		fd, err := unix.PerfEventOpen(config, pid, cpu, groupFd, flags)
 		if err != nil {
 			return fmt.Errorf("setting up perf event %#v failed: %q", config, err)
@@ -154,45 +171,33 @@ func (c *collector) registerEvent(config *unix.PerfEventAttr, name string, cgrou
 			return fmt.Errorf("unable to create os.File from file descriptor %#v", fd)
 		}
 
-		c.addEventFile(name, cpu, perfFile)
+		c.addEventFile(name, config.Type, cpu, perfFile)
 	}
 	return nil
 }
 
-func (c *collector) addEventFile(name string, cpu int, perfFile *os.File) {
+func (c *collector) addEventFile(name string, pmu uint32, cpu int, perfFile *os.File) {
 	_, ok := c.cpuFiles[name]
 	if !ok {
-		c.cpuFiles[name] = map[int]readerCloser{}
+		c.cpuFiles[name] = map[uint32]map[int]readerCloser{}
 	}
-	c.cpuFiles[name][cpu] = perfFile
+
+	_, ok = c.cpuFiles[name][pmu]
+	if !ok {
+		c.cpuFiles[name][pmu] = map[int]readerCloser{}
+	}
+
+	c.cpuFiles[name][pmu][cpu] = perfFile
 }
 
 func (c *collector) setupNonGrouped(name string, cgroup int) error {
-	if !isLibpfmInitialized {
-		return fmt.Errorf("libpfm4 is not initialized, cannot proceed with setting perf events up")
+	perfEventAttr, err := getPerfEventAttr(name)
+	if err != nil {
+		return err
 	}
+	defer C.free(unsafe.Pointer(perfEventAttr))
 
-	klog.V(5).Infof("Setting up non-grouped perf event %s", name)
-
-	perfEventAttrMemory := C.malloc(C.ulong(unsafe.Sizeof(unix.PerfEventAttr{})))
-	defer C.free(perfEventAttrMemory)
-	event := pfmPerfEncodeArgT{}
-
-	perfEventAttr := (*unix.PerfEventAttr)(perfEventAttrMemory)
-	fstr := C.CString("")
-	event.fstr = unsafe.Pointer(fstr)
-	event.attr = perfEventAttrMemory
-	event.size = C.ulong(unsafe.Sizeof(event))
-
-	cSafeName := C.CString(name)
-	pErr := C.pfm_get_os_event_encoding(cSafeName, C.PFM_PLM0|C.PFM_PLM3, C.PFM_OS_PERF_EVENT, unsafe.Pointer(&event))
-	if pErr != C.PFM_SUCCESS {
-		return fmt.Errorf("unable to transform event name %s to perf_event_attr: %d", name, int(pErr))
-	}
-
-	klog.V(5).Infof("perf_event_attr: %#v", perfEventAttr)
-	setAttributes(perfEventAttr)
-	return c.registerEvent(perfEventAttr, string(name), cgroup)
+	return c.registerEvent(perfEventAttr, name, cgroup)
 }
 
 func createPerfEventAttr(event CustomEvent) *unix.PerfEventAttr {
@@ -214,6 +219,125 @@ func createPerfEventAttr(event CustomEvent) *unix.PerfEventAttr {
 	return config
 }
 
+func (c *collector) setupRawNonGroupedUncoreMemoryController(event *CustomEvent, cgroup int) error {
+	klog.V(5).Infof("Setting up non-grouped raw perf uncore memory controller event %#v", event)
+
+	pmus, err := getIMCPMUs()
+	if err != nil {
+		return err
+	}
+
+	if event.Type == 0 {
+		// PMU isn't set. Register event for all memory PMUs.
+		for _, pmu := range pmus {
+			newEvent := CustomEvent{
+				Type:   pmu.typeOf,
+				Config: event.Config,
+				Name:   event.Name,
+			}
+			config := createPerfEventAttr(newEvent)
+			err := c.registerUncoreMemoryControllerEvent(config, string(newEvent.Name), cgroup, pmu.cpus)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	} else {
+		// Register event for the PMU.
+		config := createPerfEventAttr(*event)
+		cpus, err := pmus.getCpus(event.Type)
+		if err != nil {
+			return err
+		}
+		return c.registerUncoreMemoryControllerEvent(config, string(event.Name), cgroup, cpus)
+	}
+}
+
+func (c *collector) registerUncoreMemoryControllerEvent(config *unix.PerfEventAttr, name string, pid int, cpus []uint32) error {
+	for _, cpu := range cpus {
+		groupFd, flags := -1, unix.PERF_FLAG_FD_CLOEXEC|unix.PERF_FLAG_PID_CGROUP
+		fd, err := unix.PerfEventOpen(config, pid, int(cpu), groupFd, flags)
+		if err != nil {
+			return fmt.Errorf("setting up perf event %#v failed: %q", config, err)
+		}
+		perfFile := os.NewFile(uintptr(fd), name)
+		if perfFile == nil {
+			return fmt.Errorf("unable to create os.File from file descriptor %#v", fd)
+		}
+
+		c.addEventFile(name, config.Type, int(cpu), perfFile)
+	}
+
+	return nil
+}
+
+func getPerfEventAttr(name string) (*unix.PerfEventAttr, error) {
+	if !isLibpfmInitialized {
+		return nil, fmt.Errorf("libpfm4 is not initialized, cannot proceed with setting perf events up")
+	}
+
+	perfEventAttrMemory := C.malloc(C.ulong(unsafe.Sizeof(unix.PerfEventAttr{})))
+	event := pfmPerfEncodeArgT{}
+
+	perfEventAttr := (*unix.PerfEventAttr)(perfEventAttrMemory)
+	fstr := C.CString("")
+	event.fstr = unsafe.Pointer(fstr)
+	event.attr = perfEventAttrMemory
+	event.size = C.ulong(unsafe.Sizeof(event))
+
+	cSafeName := C.CString(name)
+
+	pErr := C.pfm_get_os_event_encoding(cSafeName, C.PFM_PLM0|C.PFM_PLM3, C.PFM_OS_PERF_EVENT_EXT, unsafe.Pointer(&event))
+	if pErr != C.PFM_SUCCESS {
+		return nil, fmt.Errorf("unable to transform event name %s to perf_event_attr: %v", name, int(pErr))
+	}
+
+	klog.V(5).Infof("perf_event_attr: %#v", perfEventAttr)
+
+	setAttributes(perfEventAttr)
+
+	return perfEventAttr, nil
+}
+
+func (c *collector) setupNonGroupedUncoreMemoryController(name string, cgroup int) error {
+	perfEventAttr, err := getPerfEventAttr(name)
+	if err != nil {
+		return err
+	}
+	defer C.free(unsafe.Pointer(perfEventAttr))
+
+	klog.V(5).Infof("Setting up non-grouped uncore perf event %s", name)
+
+	imcPMUs, err := getIMCPMUs()
+	if err != nil {
+		return err
+	}
+
+	if perfEventAttr.Type == perfTypeHardware {
+		// Register event for all memory controllers.
+		for _, pmu := range imcPMUs {
+			perfEventAttr.Type = pmu.typeOf
+			cpus, err := imcPMUs.getCpus(perfEventAttr.Type)
+			if err != nil {
+				return err
+			}
+			err = c.registerUncoreMemoryControllerEvent(perfEventAttr, name, cgroup, cpus)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	} else {
+		// Register event only for the memory controller.
+		cpus, err := imcPMUs.getCpus(perfEventAttr.Type)
+		if err != nil {
+			return err
+		}
+
+		return c.registerUncoreMemoryControllerEvent(perfEventAttr, name, cgroup, cpus)
+	}
+}
+
 func setAttributes(config *unix.PerfEventAttr) {
 	config.Sample_type = perfSampleIdentifier
 	config.Read_format = unix.PERF_FORMAT_TOTAL_TIME_ENABLED | unix.PERF_FORMAT_TOTAL_TIME_RUNNING | unix.PERF_FORMAT_ID
@@ -225,12 +349,14 @@ func (c *collector) Destroy() {
 	c.cpuFilesLock.Lock()
 	defer c.cpuFilesLock.Unlock()
 
-	for name, files := range c.cpuFiles {
-		for cpu, file := range files {
-			klog.V(5).Infof("Closing perf_event file descriptor for cgroup %q, event %q and CPU %d", c.cgroupPath, name, cpu)
-			err := file.Close()
-			if err != nil {
-				klog.Warningf("Unable to close perf_event file descriptor for cgroup %q, event %q and CPU %d", c.cgroupPath, name, cpu)
+	for name, pmus := range c.cpuFiles {
+		for pmu, files := range pmus {
+			for cpu, file := range files {
+				klog.V(5).Infof("Closing perf_event file descriptor for cgroup %q, event %q, type %q and CPU %d", c.cgroupPath, name, pmu, cpu)
+				err := file.Close()
+				if err != nil {
+					klog.Warningf("Unable to close perf_event file descriptor for cgroup %q, event %q, type %q and CPU %d", c.cgroupPath, name, pmu, cpu)
+				}
 			}
 		}
 

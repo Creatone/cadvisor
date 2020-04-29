@@ -29,10 +29,17 @@ type Events struct {
 	// output of perf list can be used.
 	Events [][]Event `json:"events"`
 
+	// List of uncore perf events to be measured.
+	UncoreEvents UncoreEvents `json:"uncore_events"`
+
 	// List of custom perf events' to be measured. It is impossible to
 	// specify some events using their names and in such case you have
 	// to provide lower level configuration.
 	CustomEvents []CustomEvent `json:"custom_events"`
+}
+
+type UncoreEvents struct {
+	MemoryController [][]Event `json:"memory_controller"`
 }
 
 type Event string
@@ -40,7 +47,7 @@ type Event string
 type CustomEvent struct {
 	// Type of the event. See perf_event_attr documentation
 	// at man perf_event_open.
-	Type uint32 `json:"type"`
+	Type uint32 `json:"type,omitempty"`
 
 	// Symbolically formed event like:
 	// pmu/config=PerfEvent.Config[0],config1=PerfEvent.Config[1],config2=PerfEvent.Config[2]
@@ -77,7 +84,7 @@ func parseConfig(file *os.File) (events Events, err error) {
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&events)
 	if err != nil {
-		err = fmt.Errorf("unable to load perf events cofiguration from %q: %q", file.Name(), err)
+		err = fmt.Errorf("unable to load perf events configuration from %q: %q", file.Name(), err)
 		return
 	}
 	return

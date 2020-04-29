@@ -3,6 +3,12 @@
     ["instructions"],
     ["instructions_retired"]
   ],
+  "uncore_events": {
+    "memory_controller": [
+      ["cas_count_write"],
+      ["UNC_M_CAS_COUNT:RD"]
+    ]
+  },
   "custom_events": [
     {
       "type": 4,
@@ -10,6 +16,12 @@
         "0x5300c0"
       ],
       "name": "instructions_retired"
+    },
+    {
+      "config": [
+        "0xc04"
+      ],
+      "name": "cas_count_write"
     }
   ]
 }

@@ -52,9 +52,9 @@ func TestCollector_UpdateStats(t *testing.T) {
 		ID:          2,
 	})
 	assert.NoError(t, err)
-	collector.cpuFiles = map[string]map[int]readerCloser{
-		"instructions": {0: notScaledBuffer},
-		"cycles":       {11: scaledBuffer},
+	collector.cpuFiles = map[string]map[uint32]map[int]readerCloser{
+		"instructions": {0: {0: notScaledBuffer}},
+		"cycles":       {0: {11: scaledBuffer}},
 	}
 
 	stats := &info.ContainerStats{}
@@ -68,12 +68,14 @@ func TestCollector_UpdateStats(t *testing.T) {
 		Value:        999999999,
 		Name:         "cycles",
 		Cpu:          11,
+		Type:         0,
 	})
 	assert.Contains(t, stats.PerfStats, info.PerfStat{
 		ScalingRatio: 1,
 		Value:        123456789,
 		Name:         "instructions",
 		Cpu:          0,
+		Type:         0,
 	})
 }
 
