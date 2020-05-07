@@ -25,6 +25,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+
+	info "github.com/google/cadvisor/info/v1"
 )
 
 type pmu struct {
@@ -124,4 +127,22 @@ func getUncoreIMCPMUs(devicesPath string) (uncorePMUs, error) {
 	}
 
 	return pmus, nil
+}
+
+type uncoreCollector struct {
+	cpuFiles           map[string]map[uint32]map[int]readerCloser
+	cpuFilesLock       sync.Mutex
+	eventToCustomEvent map[Event]*CustomEvent
+}
+
+func NewUncoreCollector(perfEventConfig string) (*uncoreCollector, error) {
+	return uncoreCollector{}, nil
+}
+
+func (u *uncoreCollector) Destroy() {
+	//TODO: Do it.
+}
+
+func (u *uncoreCollector) GetStats() ([]info.PerfStat, error) {
+	// TODO: Do it.
 }

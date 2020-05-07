@@ -194,7 +194,12 @@ func New(memoryCache *memory.InMemoryCache, sysfs sysfs.SysFs, houskeepingConfig
 		rawContainerCgroupPathPrefixWhiteList: rawContainerCgroupPathPrefixWhiteList,
 	}
 
-	machineInfo, err := machine.Info(sysfs, fsInfo, inHostNamespace)
+	newManager.perfUncoreCollector, err = perf.NewUncoreCollector(perfEventsFile)
+	if err != nil {
+		return nil, err
+	}
+
+	machineInfo, err := machine.Info(sysfs, fsInfo, inHostNamespace, newManager.perfUncoreCollector)
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +251,7 @@ type manager struct {
 	collectorHTTPClient      *http.Client
 	nvidiaManager            stats.Manager
 	perfManager              stats.Manager
+	perfUncoreCollector      perf.UncoreCollector
 	// List of raw container cgroup path prefix whitelist.
 	rawContainerCgroupPathPrefixWhiteList []string
 }
@@ -310,6 +316,7 @@ func (m *manager) Start() error {
 
 func (m *manager) Stop() error {
 	defer m.nvidiaManager.Destroy()
+	defer m.perfUncoreCollector.Destroy()
 	defer m.destroyPerfCollectors()
 	// Stop and wait on all quit channels.
 	for i, c := range m.quitChannels {
@@ -339,7 +346,7 @@ func (m *manager) updateMachineInfo(quit chan error) {
 	for {
 		select {
 		case <-ticker.C:
-			info, err := machine.Info(m.sysFs, m.fsInfo, m.inHostNamespace)
+			info, err := machine.Info(m.sysFs, m.fsInfo, m.inHostNamespace, m.perfUncoreCollector)
 			if err != nil {
 				klog.Errorf("Could not get machine info: %v", err)
 				break

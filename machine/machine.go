@@ -313,3 +313,22 @@ func getNumCores() int {
 
 	return numCPU
 }
+
+func GetPerfUncore() []info.PerfStat {
+	return []info.PerfStat{
+		{
+			ScalingRatio: 1.0,
+			Value:        1.0,
+			Name:         "cas_count_read",
+			Cpu:          0,
+			Type:         18,
+		},
+		{
+			ScalingRatio: 1.0,
+			Value:        1.0,
+			Name:         "cas_count_read",
+			Cpu:          1,
+			Type:         18,
+		},
+	}
+}

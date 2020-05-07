@@ -192,6 +192,29 @@ func NewPrometheusMachineCollector(i infoProvider, includedMetrics container.Met
 			},
 		}...)
 	}
+
+	if includedMetrics.Has(container.PerfMetrics) {
+		c.machineMetrics = append(c.machineMetrics, []machineMetric{
+			{
+				name:        "machine_perf_uncore_metric",
+				help:        "Perf uncore event metric.",
+				valueType:   prometheus.CounterValue,
+				extraLabels: []string{"cpu", "event", "type"},
+				getValues: func(machineInfo *info.MachineInfo) metricValues {
+					values := make(metricValues, 0, len(machineInfo.PerfUncoreStats))
+					for _, metric := range machineInfo.PerfUncoreStats {
+						values = append(values, metricValue{
+							value:     float64(metric.Value),
+							labels:    []string{strconv.Itoa(metric.Cpu), metric.Name, strconv.FormatUint(uint64(metric.Type), 10)},
+							timestamp: machineInfo.Timestamp,
+						})
+					}
+					return values
+				},
+			},
+		}...)
+	}
+
 	return c
 }
 

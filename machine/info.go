@@ -17,6 +17,7 @@ package machine
 import (
 	"bytes"
 	"flag"
+	"github.com/google/cadvisor/perf"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,7 @@ func getInfoFromFiles(filePaths string) string {
 	return ""
 }
 
-func Info(sysFs sysfs.SysFs, fsInfo fs.FsInfo, inHostNamespace bool) (*info.MachineInfo, error) {
+func Info(sysFs sysfs.SysFs, fsInfo fs.FsInfo, inHostNamespace bool, perfUncore perf.UncoreCollector) (*info.MachineInfo, error) {
 	rootFs := "/"
 	if !inHostNamespace {
 		rootFs = "/rootfs"
@@ -118,6 +119,10 @@ func Info(sysFs sysfs.SysFs, fsInfo fs.FsInfo, inHostNamespace bool) (*info.Mach
 	cloudProvider := realCloudInfo.GetCloudProvider()
 	instanceType := realCloudInfo.GetInstanceType()
 	instanceID := realCloudInfo.GetInstanceID()
+	perfUncoreStats, err := perfUncore.GetStats()
+	if err != nil {
+		klog.Errorf("Failed to get uncore perf event stats: %v", err)
+	}
 
 	machineInfo := &info.MachineInfo{
 		Timestamp:        time.Now(),
@@ -138,6 +143,7 @@ func Info(sysFs sysfs.SysFs, fsInfo fs.FsInfo, inHostNamespace bool) (*info.Mach
 		CloudProvider:    cloudProvider,
 		InstanceType:     instanceType,
 		InstanceID:       instanceID,
+		PerfUncoreStats:  perfUncoreStats,
 	}
 
 	for i := range filesystems {
