@@ -39,28 +39,15 @@ func NewManager(configFile string, numCores int, topology []info.Node) (stats.Ma
 
 	file, err := os.Open(configFile)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read configuration file %q: %q", configFile, err)
+		return nil, fmt.Errorf("unable to read configuration file %q: %q", configFile, err)
 	}
 
 	config, err := parseConfig(file)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read configuration file %q: %q", configFile, err)
-	}
-
-	if areGroupedEventsUsed(config) {
-		return nil, fmt.Errorf("event grouping is not supported you must modify config file at %s", configFile)
+		return nil, fmt.Errorf("unable to read configuration file %q: %q", configFile, err)
 	}
 
 	return &manager{events: config, numCores: numCores, topology: topology}, nil
-}
-
-func areGroupedEventsUsed(events PerfEvents) bool {
-	for _, group := range events.Core.Events {
-		if len(group) > 1 {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *manager) GetCollector(cgroupPath string) (stats.Collector, error) {

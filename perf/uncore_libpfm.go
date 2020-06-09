@@ -29,6 +29,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,7 +58,7 @@ const (
 	rootPerfEventPath  = "/sys/fs/cgroup/perf_event"
 )
 
-func getPMU(pmus []pmu, gotType uint32) (*pmu, error) {
+func getPMU(pmus uncorePMUs, gotType uint32) (*pmu, error) {
 	for _, pmu := range pmus {
 		if pmu.typeOf == gotType {
 			return &pmu, nil
@@ -126,14 +127,15 @@ func getUncorePMUs(devicesPath string) (uncorePMUs, error) {
 }
 
 type uncoreCollector struct {
-	cpuFiles           map[string]map[string]map[int]readerCloser
 	cpuFilesLock       sync.Mutex
-	events             [][]Event
+	cpuFiles           map[int]map[string]group
+	events             []Group
 	eventToCustomEvent map[Event]*CustomEvent
 	topology           []info.Node
 
 	// Handle for mocking purposes.
 	perfEventOpen func(attr *unix.PerfEventAttr, pid int, cpu int, groupFd int, flags int) (fd int, err error)
+	IoctlSetInt   func(fd int, req uint, value int) error
 }
 
 func NewUncoreCollector(cgroupPath string, events PerfEvents, topology []info.Node) stats.Collector {
@@ -143,10 +145,11 @@ func NewUncoreCollector(cgroupPath string, events PerfEvents, topology []info.No
 		return &stats.NoopCollector{}
 	}
 
-	collector := &uncoreCollector{topology: topology}
-
-	// Default implementation of Linux perf_event_open function.
-	collector.perfEventOpen = unix.PerfEventOpen
+	collector := &uncoreCollector{
+		topology:      topology,
+		perfEventOpen: unix.PerfEventOpen,
+		IoctlSetInt:   unix.IoctlSetInt,
+	}
 
 	err := collector.setup(events, systemDevicesPath)
 	if err != nil {
@@ -159,46 +162,96 @@ func NewUncoreCollector(cgroupPath string, events PerfEvents, topology []info.No
 }
 
 func (c *uncoreCollector) setup(events PerfEvents, devicesPath string) error {
-	var err error
 	readUncorePMUs, err := getUncorePMUs(devicesPath)
 	if err != nil {
 		return err
 	}
 
-	// Maping from event name, pmu type, cpu.
-	c.cpuFiles = make(map[string]map[string]map[int]readerCloser)
+	c.cpuFiles = make(map[int]map[string]group)
 	c.events = events.Uncore.Events
 	c.eventToCustomEvent = parseUncoreEvents(events.Uncore)
 	c.cpuFilesLock.Lock()
 	defer c.cpuFilesLock.Unlock()
 
-	for _, group := range c.events {
-		if len(group) > 1 {
-			klog.Warning("grouping uncore perf events is not supported!")
-			continue
+	for i, group := range c.events {
+		// Check what PMUs are needed.
+		groupPMUs, err := parsePMUs(group, readUncorePMUs, c.eventToCustomEvent)
+		if err != nil {
+			return err
 		}
 
-		eventName, pmuPrefix := parseEventName(string(group[0]))
+		err = checkGroup(group, groupPMUs)
+		if err != nil {
+			return err
+		}
 
-		var err error
-		customEvent, ok := c.eventToCustomEvent[group[0]]
-		if ok {
-			if customEvent.Type != 0 {
-				pmus := obtainPMUs("uncore", readUncorePMUs)
-				err = c.setupRawNonGroupedUncore(customEvent, pmus)
-			} else {
-				pmus := obtainPMUs(pmuPrefix, readUncorePMUs)
-				err = c.setupRawNonGroupedUncore(customEvent, pmus)
+		// CPUs file descriptors of group leader needed for perf_event_open.
+		leaderFileDescriptors := make(map[string]map[uint32]int)
+		for _, pmu := range readUncorePMUs {
+			leaderFileDescriptors[pmu.name] = make(map[uint32]int)
+			for _, cpu := range pmu.cpus {
+				leaderFileDescriptors[pmu.name][cpu] = -1
 			}
-		} else {
-			pmus := obtainPMUs(pmuPrefix, readUncorePMUs)
-			err = c.setupNonGroupedUncore(eventName, pmus)
 		}
+
+		for _, event := range group.events {
+			eventName, _ := parseEventName(string(event))
+			customEvent, ok := c.eventToCustomEvent[event]
+			if ok {
+				err = c.setupRawEvent(customEvent, groupPMUs[event], i, leaderFileDescriptors)
+			} else {
+				err = c.setupEvent(eventName, groupPMUs[event], i, leaderFileDescriptors)
+			}
+
+			if err != nil {
+				return err
+			}
+		}
+
+		// Group is prepared so we should reset and enable counting.
+		for _, pmuCPUs := range leaderFileDescriptors {
+			for _, fd := range pmuCPUs {
+				// Call only for used PMUs.
+				if fd != -1 {
+					err = c.IoctlSetInt(fd, unix.PERF_EVENT_IOC_RESET, 0)
+					err = c.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0)
+				}
+			}
+		}
+
 		if err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func checkGroup(group Group, eventPMUs map[Event]uncorePMUs) error {
+	if group.array {
+		var pmu uncorePMUs
+		for _, event := range group.events {
+			if len(eventPMUs[event]) > 1 {
+				return fmt.Errorf("the events in group usually have to be from single PMU, try reorganizing the \"%v\" group", group.events)
+			}
+			if len(eventPMUs[event]) == 1 {
+				if pmu == nil {
+					pmu = eventPMUs[event]
+					continue
+				}
+
+				eq := reflect.DeepEqual(pmu, eventPMUs[event])
+				if !eq {
+					return fmt.Errorf("the events in group usually have to be from the same PMU, try reorganizing the \"%v\" group", group.events)
+				}
+			}
+		}
+		return nil
+	} else {
+		if len(eventPMUs[group.events[0]]) < 1 {
+			return fmt.Errorf("the event %q don't have any PMU to count with", group.events[0])
+		}
+	}
 	return nil
 }
 
@@ -214,14 +267,35 @@ func parseEventName(eventName string) (string, string) {
 	return eventName, pmuPrefix
 }
 
-func obtainPMUs(want string, gotPMUs uncorePMUs) []pmu {
-	var pmus []pmu
+func parsePMUs(group Group, pmus uncorePMUs, customEvents map[Event]*CustomEvent) (map[Event]uncorePMUs, error) {
+	eventPMUs := make(map[Event]uncorePMUs)
+	for _, event := range group.events {
+		_, prefix := parseEventName(string(event))
+		custom, ok := customEvents[event]
+		if ok {
+			if custom.Type != 0 {
+				pmu, err := getPMU(pmus, custom.Type)
+				if err != nil {
+					return nil, err
+				}
+				eventPMUs[event] = uncorePMUs{pmu.name: *pmu}
+				continue
+			}
+		}
+		eventPMUs[event] = obtainPMUs(prefix, pmus)
+	}
+
+	return eventPMUs, nil
+}
+
+func obtainPMUs(want string, gotPMUs uncorePMUs) uncorePMUs {
+	pmus := make(uncorePMUs)
 	if want == "" {
 		return pmus
 	}
 	for _, pmu := range gotPMUs {
 		if strings.HasPrefix(pmu.name, want) {
-			pmus = append(pmus, pmu)
+			pmus[pmu.name] = pmu
 		}
 	}
 
@@ -230,11 +304,13 @@ func obtainPMUs(want string, gotPMUs uncorePMUs) []pmu {
 
 func parseUncoreEvents(events Events) map[Event]*CustomEvent {
 	eventToCustomEvent := map[Event]*CustomEvent{}
-	for _, uncoreEvent := range events.Events {
-		for _, customEvent := range events.CustomEvents {
-			if uncoreEvent[0] == customEvent.Name {
-				eventToCustomEvent[customEvent.Name] = &customEvent
-				break
+	for _, group := range events.Events {
+		for _, uncoreEvent := range group.events {
+			for _, customEvent := range events.CustomEvents {
+				if uncoreEvent == customEvent.Name {
+					eventToCustomEvent[customEvent.Name] = &customEvent
+					break
+				}
 			}
 		}
 	}
@@ -246,34 +322,37 @@ func (c *uncoreCollector) Destroy() {
 	c.cpuFilesLock.Lock()
 	defer c.cpuFilesLock.Unlock()
 
-	for name, pmus := range c.cpuFiles {
-		for pmu, cpus := range pmus {
-			for cpu, file := range cpus {
-				klog.V(5).Infof("Closing uncore perf_event file descriptor for event %q, PMU %s and CPU %d", name, pmu, cpu)
-				err := file.Close()
-				if err != nil {
-					klog.Warningf("Unable to close perf_event file descriptor for event %q, PMU %s and CPU %d", name, pmu, cpu)
+	for groupIndex, groupPMUs := range c.cpuFiles {
+		for pmu, group := range groupPMUs {
+			for name, cpus := range group.cpuFiles {
+				for cpu, file := range cpus {
+					klog.V(5).Infof("Closing uncore perf_event file descriptor for event %q, PMU %s and CPU %d", name, pmu, cpu)
+					err := file.Close()
+					if err != nil {
+						klog.Warningf("Unable to close perf_event file descriptor for event %q, PMU %s and CPU %d", name, pmu, cpu)
+					}
 				}
+				delete(group.cpuFiles, name)
 			}
-			delete(pmus, pmu)
+			delete(groupPMUs, pmu)
 		}
-		delete(c.cpuFiles, name)
+		delete(c.cpuFiles, groupIndex)
 	}
 }
 
 func (c *uncoreCollector) UpdateStats(stats *info.ContainerStats) error {
 	klog.V(5).Info("Attempting to update uncore perf_event stats")
 
-	for name, pmus := range c.cpuFiles {
-		for pmu, cpus := range pmus {
-			for cpu, file := range cpus {
-				stat, err := readPerfUncoreStat(file, name, cpu, pmu, c.topology)
+	for _, groupPMUs := range c.cpuFiles {
+		for pmu, group := range groupPMUs {
+			for cpu, file := range group.cpuFiles[group.leaderName] {
+				stat, err := readPerfUncoreStat(file, group, cpu, pmu, c.topology)
 				if err != nil {
-					return fmt.Errorf("unable to read from uncore perf_event_file (event: %q, CPU: %d, PMU: %s): %q", name, cpu, pmu, err.Error())
+					klog.Warningf("Unable to read from perf_event_file (event: %q, CPU: %d) for %q: %q", group.leaderName, cpu, pmu, err.Error())
+					continue
 				}
-				klog.V(5).Infof("Read uncore perf event (event: %q, CPU: %d, PMU: %s): %d", name, cpu, pmu, stat.Value)
 
-				stats.PerfUncoreStats = append(stats.PerfUncoreStats, *stat)
+				stats.PerfUncoreStats = append(stats.PerfUncoreStats, stat...)
 			}
 		}
 	}
@@ -281,112 +360,149 @@ func (c *uncoreCollector) UpdateStats(stats *info.ContainerStats) error {
 	return nil
 }
 
-func (c *uncoreCollector) setupRawNonGroupedUncore(event *CustomEvent, pmus []pmu) error {
-	klog.V(5).Infof("Setting up non-grouped raw perf uncore event %#v", event)
-
-	if event.Type == 0 {
-		// PMU isn't set. Register event for all PMUs.
-		for _, pmu := range pmus {
-			newEvent := CustomEvent{
-				Type:   pmu.typeOf,
-				Config: event.Config,
-				Name:   event.Name,
-			}
-			config := createPerfEventAttr(newEvent)
-			err := c.registerUncoreEvent(config, string(newEvent.Name), pmu.cpus, pmu.name)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	} else {
-		// Register event for the PMU.
-		config := createPerfEventAttr(*event)
-		pmu, err := getPMU(pmus, event.Type)
-		if err != nil {
-			return err
-		}
-		return c.registerUncoreEvent(config, string(event.Name), pmu.cpus, pmu.name)
+func (c *uncoreCollector) setupEvent(name string, pmus uncorePMUs, groupIndex int, leaderFileDescriptors map[string]map[uint32]int) error {
+	if !isLibpfmInitialized {
+		return fmt.Errorf("libpfm4 is not initialized, cannot proceed with setting perf events up")
 	}
-}
 
-func (c *uncoreCollector) setupNonGroupedUncore(name string, pmus []pmu) error {
-	perfEventAttr, err := getPerfEventAttr(name)
+	klog.V(5).Infof("Setting up grouped uncore perf event %s", name)
+
+	perfEventAttrMemory := C.malloc(C.ulong(unsafe.Sizeof(unix.PerfEventAttr{})))
+	defer C.free(perfEventAttrMemory)
+	err := readPerfEventAttr(name, perfEventAttrMemory)
 	if err != nil {
 		return err
 	}
-	defer C.free(unsafe.Pointer(perfEventAttr))
-
-	klog.V(5).Infof("Setting up non-grouped uncore perf event %s", name)
+	perfEventAttr := (*unix.PerfEventAttr)(perfEventAttrMemory)
 
 	// Register event for all memory controllers.
 	for _, pmu := range pmus {
 		perfEventAttr.Type = pmu.typeOf
-		err = c.registerUncoreEvent(perfEventAttr, name, pmu.cpus, pmu.name)
+		setGroupAttributes(perfEventAttr, leaderFileDescriptors[pmu.name][pmu.cpus[0]] == -1)
+		err = c.registerEvent(perfEventAttr, name, pmu.cpus, pmu.name, leaderFileDescriptors, groupIndex)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-func (c *uncoreCollector) registerUncoreEvent(config *unix.PerfEventAttr, name string, cpus []uint32, pmu string) error {
+func (c *uncoreCollector) registerEvent(config *unix.PerfEventAttr, name string, cpus []uint32, pmu string, leaderFileDescriptors map[string]map[uint32]int, groupIndex int) error {
 	for _, cpu := range cpus {
-		groupFd, pid, flags := -1, -1, 0
+		groupFd, pid, flags := leaderFileDescriptors[pmu][cpu], -1, 0
 		fd, err := c.perfEventOpen(config, pid, int(cpu), groupFd, flags)
 		if err != nil {
-			return fmt.Errorf("setting up perf event %#v failed: %q", config, err)
+			return fmt.Errorf("setting up perf event %#v failed: %q | (pmu: %q, groupFd: %d, cpu: %d)", config, err, pmu, groupFd, cpu)
 		}
 		perfFile := os.NewFile(uintptr(fd), name)
 		if perfFile == nil {
 			return fmt.Errorf("unable to create os.File from file descriptor %#v", fd)
 		}
 
-		c.addEventFile(name, pmu, int(cpu), perfFile)
+		c.addEventFile(groupIndex, name, pmu, int(cpu), perfFile)
+
+		// If group leader, save fd for others.
+		if leaderFileDescriptors[pmu][cpu] == -1 {
+			leaderFileDescriptors[pmu][cpu] = fd
+		}
 	}
 
 	return nil
 }
 
-func (c *uncoreCollector) addEventFile(name string, pmu string, cpu int, perfFile *os.File) {
-	_, ok := c.cpuFiles[name]
+func (c *uncoreCollector) addEventFile(index int, name string, pmu string, cpu int, perfFile *os.File) {
+	_, ok := c.cpuFiles[index]
 	if !ok {
-		c.cpuFiles[name] = map[string]map[int]readerCloser{}
+		c.cpuFiles[index] = map[string]group{}
 	}
 
-	_, ok = c.cpuFiles[name][pmu]
+	_, ok = c.cpuFiles[index][pmu]
 	if !ok {
-		c.cpuFiles[name][pmu] = map[int]readerCloser{}
+		c.cpuFiles[index][pmu] = group{
+			cpuFiles:   map[string]map[int]readerCloser{},
+			leaderName: name,
+		}
 	}
 
-	c.cpuFiles[name][pmu][cpu] = perfFile
+	_, ok = c.cpuFiles[index][pmu].cpuFiles[name]
+	if !ok {
+		c.cpuFiles[index][pmu].cpuFiles[name] = map[int]readerCloser{}
+	}
+
+	c.cpuFiles[index][pmu].cpuFiles[name][cpu] = perfFile
+
+	// Check if name is already stored.
+	for _, have := range c.cpuFiles[index][pmu].names {
+		if name == have {
+			return
+		}
+	}
+
+	// Otherwise save it.
+	c.cpuFiles[index][pmu] = group{
+		cpuFiles:   c.cpuFiles[index][pmu].cpuFiles,
+		names:      append(c.cpuFiles[index][pmu].names, name),
+		leaderName: c.cpuFiles[index][pmu].leaderName,
+	}
 }
 
-func readPerfUncoreStat(file readerCloser, name string, cpu int, pmu string, topology []info.Node) (*info.PerfUncoreStat, error) {
-	buf := make([]byte, 32)
+func (c *uncoreCollector) setupRawEvent(event *CustomEvent, pmus uncorePMUs, groupIndex int, leaderFileDescriptors map[string]map[uint32]int) error {
+	klog.V(5).Infof("Setting up grouped raw perf uncore event %#v", event)
+
+	for _, pmu := range pmus {
+		newEvent := CustomEvent{
+			Type:   pmu.typeOf,
+			Config: event.Config,
+			Name:   event.Name,
+		}
+		config := createPerfEventAttr(newEvent)
+		setGroupAttributes(config, leaderFileDescriptors[pmu.name][pmu.cpus[0]] == -1)
+		err := c.registerEvent(config, string(newEvent.Name), pmu.cpus, pmu.name, leaderFileDescriptors, groupIndex)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func readPerfUncoreStat(file readerCloser, group group, cpu int, pmu string, topology []info.Node) ([]info.PerfUncoreStat, error) {
+	var perfUncoreStats []info.PerfUncoreStat
+	// 24 bytes of GroupReadFormat struct.
+	// 16 bytes of Values struct for each element in group.
+	buf := make([]byte, 24+16*len(group.names))
 	_, err := file.Read(buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to read perf event group ( leader = %s ): %v", group.leaderName, err)
 	}
-	perfData := &ReadFormat{}
-	reader := bytes.NewReader(buf)
+	perfData := &GroupReadFormat{}
+	reader := bytes.NewBuffer(buf[:24]) // First 24 bytes of GroupReadFormat.
 	err = binary.Read(reader, binary.LittleEndian, perfData)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to decode perf event group ( leader = %s ): %v", group.leaderName, err)
 	}
+	values := make([]Values, perfData.Nr)
+
+	reader = bytes.NewBuffer(buf[24:]) // Rest bytes of Values for each element in group.
+	err = binary.Read(reader, binary.LittleEndian, values)
 
 	scalingRatio := 1.0
 	if perfData.TimeEnabled != 0 {
 		scalingRatio = float64(perfData.TimeRunning) / float64(perfData.TimeEnabled)
 	}
 
-	stat := info.PerfUncoreStat{
-		Value:        uint64(float64(perfData.Value) / scalingRatio),
-		Name:         name,
-		ScalingRatio: scalingRatio,
-		Socket:       sysinfo.GetSocketFromCPU(topology, cpu),
-		PMU:          pmu,
+	for i, name := range group.names {
+		klog.V(5).Infof("Read metric for event %q for cpu %d from pmu %q: %d", name, cpu, pmu, values[i].Value)
+		stat := info.PerfUncoreStat{
+			Value:        uint64(float64(values[i].Value) / scalingRatio),
+			Name:         name,
+			ScalingRatio: scalingRatio,
+			PMU:          pmu,
+			Socket:       sysinfo.GetSocketFromCPU(topology, cpu),
+		}
+		perfUncoreStats = append(perfUncoreStats, stat)
 	}
 
-	return &stat, nil
+	return perfUncoreStats, nil
 }

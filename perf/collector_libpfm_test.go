@@ -40,30 +40,77 @@ func TestCollector_UpdateStats(t *testing.T) {
 	collector := collector{uncore: &stats.NoopCollector{}}
 	notScaledBuffer := buffer{bytes.NewBuffer([]byte{})}
 	scaledBuffer := buffer{bytes.NewBuffer([]byte{})}
-	err := binary.Write(notScaledBuffer, binary.LittleEndian, ReadFormat{
-		Value:       123456789,
+	groupedBuffer := buffer{bytes.NewBuffer([]byte{})}
+	err := binary.Write(notScaledBuffer, binary.LittleEndian, GroupReadFormat{
+		Nr:          1,
 		TimeEnabled: 100,
 		TimeRunning: 100,
-		ID:          1,
 	})
 	assert.NoError(t, err)
-	err = binary.Write(scaledBuffer, binary.LittleEndian, ReadFormat{
-		Value:       333333333,
+	err = binary.Write(notScaledBuffer, binary.LittleEndian, Values{
+		Value: 123456789,
+		ID:    0,
+	})
+	assert.NoError(t, err)
+	err = binary.Write(scaledBuffer, binary.LittleEndian, GroupReadFormat{
+		Nr:          1,
 		TimeEnabled: 3,
 		TimeRunning: 1,
-		ID:          2,
 	})
 	assert.NoError(t, err)
-	collector.cpuFiles = map[string]map[int]readerCloser{
-		"instructions": {0: notScaledBuffer},
-		"cycles":       {11: scaledBuffer},
+	err = binary.Write(scaledBuffer, binary.LittleEndian, Values{
+		Value: 333333333,
+		ID:    2,
+	})
+	assert.NoError(t, err)
+	err = binary.Write(groupedBuffer, binary.LittleEndian, GroupReadFormat{
+		Nr:          2,
+		TimeEnabled: 100,
+		TimeRunning: 100,
+	})
+	assert.NoError(t, err)
+	err = binary.Write(groupedBuffer, binary.LittleEndian, Values{
+		Value: 123456,
+		ID:    0,
+	})
+	assert.NoError(t, err)
+	err = binary.Write(groupedBuffer, binary.LittleEndian, Values{
+		Value: 654321,
+		ID:    1,
+	})
+	assert.NoError(t, err)
+
+	collector.cpuFiles = map[int]group{
+		1: {
+			cpuFiles: map[string]map[int]readerCloser{
+				"instructions": {0: notScaledBuffer},
+			},
+			names:      []string{"instructions"},
+			leaderName: "instructions",
+		},
+		2: {
+			cpuFiles: map[string]map[int]readerCloser{
+				"cycles": {11: scaledBuffer},
+			},
+			names:      []string{"cycles"},
+			leaderName: "cycles",
+		},
+		3: {
+			cpuFiles: map[string]map[int]readerCloser{
+				"cache-misses": {
+					0: groupedBuffer,
+				},
+			},
+			names:      []string{"cache-misses", "cache-references"},
+			leaderName: "cache-misses",
+		},
 	}
 
 	stats := &info.ContainerStats{}
 	err = collector.UpdateStats(stats)
 
 	assert.NoError(t, err)
-	assert.Len(t, stats.PerfStats, 2)
+	assert.Len(t, stats.PerfStats, 4)
 
 	assert.Contains(t, stats.PerfStats, info.PerfStat{
 		ScalingRatio: 0.3333333333333333,
@@ -75,6 +122,18 @@ func TestCollector_UpdateStats(t *testing.T) {
 		ScalingRatio: 1,
 		Value:        123456789,
 		Name:         "instructions",
+		Cpu:          0,
+	})
+	assert.Contains(t, stats.PerfStats, info.PerfStat{
+		ScalingRatio: 1.0,
+		Value:        123456,
+		Name:         "cache-misses",
+		Cpu:          0,
+	})
+	assert.Contains(t, stats.PerfStats, info.PerfStat{
+		ScalingRatio: 1.0,
+		Value:        654321,
+		Name:         "cache-references",
 		Cpu:          0,
 	})
 }
@@ -92,15 +151,32 @@ func TestCreatePerfEventAttr(t *testing.T) {
 	assert.Equal(t, uint64(2), attributes.Config)
 	assert.Equal(t, uint64(3), attributes.Ext1)
 	assert.Equal(t, uint64(4), attributes.Ext2)
+}
+
+func TestSetGroupAttributes(t *testing.T) {
+	event := CustomEvent{
+		Type:   0x1,
+		Config: Config{uint64(0x2), uint64(0x3), uint64(0x4)},
+		Name:   "fake_event",
+	}
+
+	attributes := createPerfEventAttr(event)
+	setGroupAttributes(attributes, true)
 	assert.Equal(t, uint64(65536), attributes.Sample_type)
-	assert.Equal(t, uint64(7), attributes.Read_format)
-	assert.Equal(t, uint64(1048578), attributes.Bits)
+	assert.Equal(t, uint64(0xf), attributes.Read_format)
+	assert.Equal(t, uint64(0x100003), attributes.Bits)
+
+	attributes = createPerfEventAttr(event)
+	setGroupAttributes(attributes, false)
+	assert.Equal(t, uint64(65536), attributes.Sample_type)
+	assert.Equal(t, uint64(0xf), attributes.Read_format)
+	assert.Equal(t, uint64(0x100002), attributes.Bits)
 }
 
 func TestNewCollector(t *testing.T) {
 	perfCollector := newCollector("cgroup", PerfEvents{
 		Core: Events{
-			Events: [][]Event{{"event_1"}, {"event_2"}},
+			Events: []Group{{[]Event{"event_1"}, false}, {[]Event{"event_2"}, false}},
 			CustomEvents: []CustomEvent{{
 				Type:   0,
 				Config: []uint64{1, 2, 3},

@@ -29,12 +29,15 @@ const (
 	perfAttrBitsExcludeGuest = 1 << 20
 )
 
-// ReadFormat allows to read perf event's value for non-grouped events
-type ReadFormat struct {
-	Value       uint64 /* The value of the event */
+type GroupReadFormat struct {
+	Nr          uint64 /* The number of events */
 	TimeEnabled uint64 /* if PERF_FORMAT_TOTAL_TIME_ENABLED */
 	TimeRunning uint64 /* if PERF_FORMAT_TOTAL_TIME_RUNNING */
-	ID          uint64 /* if PERF_FORMAT_ID */
+}
+
+type Values struct {
+	Value uint64 /* The value of the event */
+	ID    uint64 /* if PERF_FORMAT_ID */
 }
 
 // pfmPerfEncodeArgT represents structure that is used to parse perf event nam

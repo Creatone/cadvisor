@@ -20,10 +20,10 @@ package perf
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	info "github.com/google/cadvisor/info/v1"
 	"github.com/google/cadvisor/stats"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNoConfigFilePassed(t *testing.T) {
@@ -43,13 +43,6 @@ func TestNonExistentFile(t *testing.T) {
 
 func TestMalformedJsonFile(t *testing.T) {
 	manager, err := NewManager("testing/this-is-some-random.json", 1, []info.Node{})
-
-	assert.NotNil(t, err)
-	assert.Nil(t, manager)
-}
-
-func TestGroupedEvents(t *testing.T) {
-	manager, err := NewManager("testing/grouped.json", 1, []info.Node{})
 
 	assert.NotNil(t, err)
 	assert.Nil(t, manager)
