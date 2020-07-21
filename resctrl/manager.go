@@ -18,31 +18,30 @@
 package resctrl
 
 import (
-	"os"
+	"errors"
 
 	"github.com/google/cadvisor/stats"
-
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type manager struct {
-	id string
 	stats.NoopDestroy
 }
 
-func (m manager) GetCollector(resctrlPath string) (stats.Collector, error) {
-	if _, err := os.Stat(resctrlPath); err != nil {
+func (m manager) GetCollector(containerID string) (stats.Collector, error) {
+	collector, err := newCollector(containerID)
+	if err != nil {
 		return &stats.NoopCollector{}, err
 	}
-	collector := newCollector(m.id, resctrlPath)
+
 	return collector, nil
 }
 
-func NewManager(id string) (stats.Manager, error) {
+func NewManager() (stats.Manager, error) {
 
 	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
-		return &manager{id: id}, nil
+		return &manager{}, nil
 	}
 
-	return &stats.NoopManager{}, nil
+	return &stats.NoopManager{}, errors.New("there is no MBM or CMT enabled")
 }
