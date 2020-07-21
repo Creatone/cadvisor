@@ -48,7 +48,6 @@ import (
 
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"github.com/opencontainers/runc/libcontainer/cgroups/fs2"
-	"github.com/opencontainers/runc/libcontainer/intelrdt"
 
 	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
@@ -217,7 +216,7 @@ func New(memoryCache *memory.InMemoryCache, sysfs sysfs.SysFs, houskeepingConfig
 		return nil, err
 	}
 
-	newManager.resctrlManager, err = resctrl.NewManager(selfContainer)
+	newManager.resctrlManager, err = resctrl.NewManager()
 	if err != nil {
 		klog.V(4).Infof("Cannot gather resctrl metrics: %v", err)
 	}
@@ -328,6 +327,8 @@ func (m *manager) Start() error {
 func (m *manager) Stop() error {
 	defer m.nvidiaManager.Destroy()
 	defer m.destroyPerfCollectors()
+	defer m.destroyResctrlCollectors()
+
 	// Stop and wait on all quit channels.
 	for i, c := range m.quitChannels {
 		// Send the exit signal and wait on the thread to exit (by closing the channel).
@@ -348,6 +349,12 @@ func (m *manager) Stop() error {
 func (m *manager) destroyPerfCollectors() {
 	for _, container := range m.containers {
 		container.perfCollector.Destroy()
+	}
+}
+
+func (m *manager) destroyResctrlCollectors() {
+	for _, container := range m.containers {
+		container.resctrlCollector.Destroy()
 	}
 }
 
@@ -956,14 +963,9 @@ func (m *manager) createContainerLocked(containerName string, watchSource watche
 	}
 
 	if m.includedMetrics.Has(container.ResctrlMetrics) {
-		resctrlPath, err := intelrdt.GetIntelRdtPath(containerName)
+		cont.resctrlCollector, err = m.resctrlManager.GetCollector(containerName)
 		if err != nil {
-			klog.V(4).Infof("Error getting resctrl path: %q", err)
-		} else {
-			cont.resctrlCollector, err = m.resctrlManager.GetCollector(resctrlPath)
-			if err != nil {
-				klog.V(4).Infof("resctrl metrics will not be available for container %s: %s", cont.info.Name, err)
-			}
+			klog.V(4).Infof("resctrl metrics will not be available for container %s: %s", cont.info.Name, err)
 		}
 	}
 

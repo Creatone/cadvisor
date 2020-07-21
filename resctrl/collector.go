@@ -18,39 +18,86 @@
 package resctrl
 
 import (
-	info "github.com/google/cadvisor/info/v1"
-	"github.com/google/cadvisor/stats"
+	"k8s.io/klog/v2"
+	"path/filepath"
 
-	"github.com/opencontainers/runc/libcontainer/configs"
+	info "github.com/google/cadvisor/info/v1"
+
+	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
+const (
+	rootContainerID = "/"
+)
+
 type collector struct {
-	resctrl intelrdt.IntelRdtManager
-	stats.NoopDestroy
+	resctrl  intelrdt.IntelRdtManager
+	pidsPath string
 }
 
-func newCollector(id string, resctrlPath string) *collector {
-	collector := &collector{
-		resctrl: intelrdt.IntelRdtManager{
-			Config: &configs.Config{
-				IntelRdt: &configs.IntelRdt{},
-			},
-			Id:   id,
-			Path: resctrlPath,
-		},
+func newCollector(id string) (*collector, error) {
+	if id == rootContainerID {
+		collector := collector{
+			intelrdt.IntelRdtManager{
+				Id:   id,
+				Type: intelrdt.CTRL_MON,
+			}, ""}
+
+		return &collector, nil
 	}
 
-	return collector
+	var pidsPath string
+	if cgroups.IsCgroup2UnifiedMode() {
+		pidsPath = filepath.Join("/sys/fs/cgroup", id)
+	} else {
+		pidsPath = filepath.Join("/sys/fs/cgroup/cpu", id)
+	}
+
+	collector := &collector{
+		intelrdt.IntelRdtManager{
+			Id:   id,
+			Type: intelrdt.MON,
+		}, pidsPath}
+
+	// Prepare monitoring directory.
+	err := collector.resctrl.Set(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare pids.
+	err = collector.updatePids()
+	if err != nil {
+		return nil, err
+	}
+
+	return collector, nil
+}
+
+func (c *collector) updatePids() error {
+	pids, err := cgroups.GetPids(c.pidsPath)
+	if err != nil {
+		return err
+	}
+
+	for _, pid := range pids {
+		err := c.resctrl.Apply(pid)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *collector) UpdateStats(stats *info.ContainerStats) error {
-	stats.Resctrl = info.ResctrlStats{}
-
 	resctrlStats, err := c.resctrl.GetStats()
 	if err != nil {
 		return err
 	}
+
+	stats.Resctrl = info.ResctrlStats{}
 
 	numberOfNUMANodes := len(*resctrlStats.MBMStats)
 
@@ -70,5 +117,22 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 			info.CacheStats{LLCOccupancy: numaNodeStats.LLCOccupancy})
 	}
 
+	if c.resctrl.Id != rootContainerID {
+		err = c.updatePids()
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (c *collector) Destroy() {
+	// We shouldn't destroy Resctrl rootfs.
+	if c.resctrl.Id != rootContainerID {
+		err := c.resctrl.Destroy()
+		if err != nil {
+			klog.Error(err)
+		}
+	}
 }

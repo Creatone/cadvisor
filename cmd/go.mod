@@ -28,12 +28,13 @@ require (
 	github.com/onsi/gomega v1.7.1 // indirect
 	github.com/pquerna/ffjson v0.0.0-20171002144729-d49c2bc1aa13 // indirect
 	github.com/prometheus/client_golang v1.7.1
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.6.1
 	golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be
 	google.golang.org/api v0.0.0-20150730141719-0c2979aeaa5b
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/olivere/elastic.v2 v2.0.12
-	gopkg.in/yaml.v2 v2.2.8 // indirect
-	k8s.io/klog/v2 v2.0.0
+	k8s.io/klog/v2 v2.2.0
 	k8s.io/utils v0.0.0-20200414100711-2df71ebbae66
 )
+
+replace github.com/opencontainers/runc v1.0.0-rc91 => github.com/Creatone/runc v1.0.0-rc15
