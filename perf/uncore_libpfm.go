@@ -196,7 +196,7 @@ func (c *uncoreCollector) setup(events PerfEvents, devicesPath string) error {
 
 		for _, event := range group.events {
 			eventName, _ := parseEventName(string(event))
-			customEvent, ok := c.eventToCustomEvent[event]
+			customEvent, ok := c.eventToCustomEvent[Event(eventName)]
 			if ok {
 				err = c.setupRawEvent(customEvent, groupPMUs[event], i, leaderFileDescriptors)
 			} else {
@@ -270,8 +270,8 @@ func parseEventName(eventName string) (string, string) {
 func parsePMUs(group Group, pmus uncorePMUs, customEvents map[Event]*CustomEvent) (map[Event]uncorePMUs, error) {
 	eventPMUs := make(map[Event]uncorePMUs)
 	for _, event := range group.events {
-		_, prefix := parseEventName(string(event))
-		custom, ok := customEvents[event]
+		name, prefix := parseEventName(string(event))
+		custom, ok := customEvents[Event(name)]
 		if ok {
 			if custom.Type != 0 {
 				pmu, err := getPMU(pmus, custom.Type)
@@ -306,8 +306,9 @@ func parseUncoreEvents(events Events) map[Event]*CustomEvent {
 	eventToCustomEvent := map[Event]*CustomEvent{}
 	for _, group := range events.Events {
 		for _, uncoreEvent := range group.events {
+			name, _ := parseEventName(string(uncoreEvent))
 			for _, customEvent := range events.CustomEvents {
-				if uncoreEvent == customEvent.Name {
+				if Event(name) == customEvent.Name {
 					eventToCustomEvent[customEvent.Name] = &customEvent
 					break
 				}
