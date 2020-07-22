@@ -1,0 +1,31 @@
+{
+  "core": {
+    "events": [
+      ["instructions", "cycles", "offcore_requests.demand_data_rd", "offcore_requests.demand_rfo"]
+    ]
+  },
+  "uncore": {
+    "events": [
+      ["uncore_imc_0/pmm_bandwidth_reads", "uncore_imc_0/pmm_bandwidth_writes", "uncore_imc_0/unc_m_cas_count.rd", "uncore_imc_0/unc_m_cas_count.wr"],
+      ["uncore_imc_1/pmm_bandwidth_reads", "uncore_imc_1/pmm_bandwidth_writes", "uncore_imc_1/unc_m_cas_count.rd", "uncore_imc_1/unc_m_cas_count.wr"],
+      ["uncore_imc_2/pmm_bandwidth_reads", "uncore_imc_2/pmm_bandwidth_writes", "uncore_imc_2/unc_m_cas_count.rd", "uncore_imc_2/unc_m_cas_count.wr"],
+      ["uncore_imc_3/pmm_bandwidth_reads", "uncore_imc_3/pmm_bandwidth_writes", "uncore_imc_3/unc_m_cas_count.rd", "uncore_imc_3/unc_m_cas_count.wr"],
+      ["uncore_imc_4/pmm_bandwidth_reads", "uncore_imc_4/pmm_bandwidth_writes", "uncore_imc_4/unc_m_cas_count.rd", "uncore_imc_4/unc_m_cas_count.wr"],
+      ["uncore_imc_5/pmm_bandwidth_reads", "uncore_imc_5/pmm_bandwidth_writes", "uncore_imc_5/unc_m_cas_count.rd", "uncore_imc_5/unc_m_cas_count.wr"]
+    ],
+    "custom_events": [
+      {
+        "config": [
+          "0xe3"
+        ],
+        "name": "pmm_bandwidth_reads"
+      },
+      {
+        "config": [
+          "0xe7"
+        ],
+        "name": "pmm_bandwidth_writes"
+      }
+    ]
+  }
+}

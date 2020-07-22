@@ -1,0 +1,7 @@
+{
+  "core": {
+    "events": [
+      ["instructions", "cycles", "cache-misses", "cache-references", "cycle_activity.stalls_mem_any", "offcore_requests.l3_miss_demand_data_rd"]
+    ]
+  }
+}
