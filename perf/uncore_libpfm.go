@@ -377,8 +377,8 @@ func (c *uncoreCollector) setupEvent(name string, pmus uncorePMUs, groupIndex in
 	for _, pmu := range pmus {
 		config.Type = pmu.typeOf
 		isGroupLeader := leaderFileDescriptors[pmu.name][pmu.cpus[0]] == groupLeaderFileDescriptor
-		setAttributes(config, isGroupLeader)
-		leaderFileDescriptors[pmu.name], err = c.registerEvent(eventInfo{name, config, uncorePID, groupIndex, isGroupLeader}, pmu, leaderFileDescriptors[pmu.name])
+		setAttributes(config, isGroupLeader, false)
+		leaderFileDescriptors[pmu.name], err = c.registerEvent(eventInfo{name, config, uncorePID, groupIndex, isGroupLeader, false}, pmu, leaderFileDescriptors[pmu.name])
 		if err != nil {
 			return err
 		}
@@ -468,9 +468,9 @@ func (c *uncoreCollector) setupRawEvent(event *CustomEvent, pmus uncorePMUs, gro
 		}
 		config := createPerfEventAttr(newEvent)
 		isGroupLeader := leaderFileDescriptors[pmu.name][pmu.cpus[0]] == groupLeaderFileDescriptor
-		setAttributes(config, isGroupLeader)
+		setAttributes(config, isGroupLeader, event.ExcludeGuest)
 		var err error
-		leaderFileDescriptors[pmu.name], err = c.registerEvent(eventInfo{string(newEvent.Name), config, uncorePID, groupIndex, isGroupLeader}, pmu, leaderFileDescriptors[pmu.name])
+		leaderFileDescriptors[pmu.name], err = c.registerEvent(eventInfo{string(newEvent.Name), config, uncorePID, groupIndex, isGroupLeader, event.ExcludeGuest}, pmu, leaderFileDescriptors[pmu.name])
 		if err != nil {
 			return err
 		}

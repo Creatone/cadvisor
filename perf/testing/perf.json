@@ -10,7 +10,8 @@
         "config": [
           "0x5300c0"
         ],
-        "name": "instructions_retired"
+        "name": "instructions_retired",
+        "exclude_guest": true
       }
     ]
   },
@@ -26,7 +27,8 @@
         "config": [
           "0x5300"
         ],
-        "name": "cas_count_write"
+        "name": "cas_count_write",
+        "exclude_guest": false
       }
     ]
   }

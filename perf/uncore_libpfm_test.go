@@ -117,9 +117,9 @@ func TestUncoreCollectorSetup(t *testing.T) {
 				{[]Event{"uncore_imc_0/cas_count_write", "uncore_imc_0/cas_count_read"}, true},
 			},
 			CustomEvents: []CustomEvent{
-				{19, Config{0x01, 0x02}, "uncore_imc_1/cas_count_read"},
-				{0, Config{0x02, 0x03}, "uncore_imc_0/cas_count_write"},
-				{18, Config{0x01, 0x02}, "uncore_imc_0/cas_count_read"},
+				{19, Config{0x01, 0x02}, "uncore_imc_1/cas_count_read", false},
+				{0, Config{0x02, 0x03}, "uncore_imc_0/cas_count_write", false},
+				{18, Config{0x01, 0x02}, "uncore_imc_0/cas_count_read", false},
 			},
 		},
 	}

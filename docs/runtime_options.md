@@ -166,6 +166,7 @@ measure them in transactional manner: all the events in a group must be accounte
 in mind that it is impossible to group more events that there are counters available.
 * `uncore events` - events which can be counted by PMUs outside core.
 * `PMU` - Performance Monitoring Unit
+* `exclude_guest` - parameter from ``man perf_event_open``.
 
 #### Getting config values
 Using perf tools:
@@ -199,7 +200,8 @@ perf_event_attr:
         "config": [
           "0x304"
         ],
-        "name": "event_name"
+        "name": "event_name",
+        "exclude_guest": true
       }
     ]
   },
@@ -213,7 +215,8 @@ perf_event_attr:
         "config": [
           "0x304"
         ],
-        "name": "event_name"
+        "name": "event_name",
+        "exclude_guest": true
       }
     ]
   }
@@ -243,7 +246,8 @@ Let's explain this by example:
         "config": [
           "0x304"
         ],
-        "name": "uncore_imc_0/cas_count_write"
+        "name": "uncore_imc_0/cas_count_write",
+        "exclude_guest": true
       },
       {
         "type": 19,
@@ -261,7 +265,7 @@ Let's explain this by example:
     it would be counted by **all** Integrated Memory Controller PMUs with config provided from libpfm package.
     (using this function: https://man7.org/linux/man-pages/man3/pfm_get_os_event_encoding.3.html)
 
-- `uncore_imc_0/cas_count_write` - because of `uncore_imc_0` type and entry in custom events it would be counted by `uncore_imc_0` PMU with provided config.
+- `uncore_imc_0/cas_count_write` - because of `uncore_imc_0` type and entry in custom events it would be counted by `uncore_imc_0` PMU with provided config and exclude_guest param.
 
 - `uncore_imc_1/cas_count_all` - because of entry in custom events with type field, event would be counted by PMU with **19** type and provided config.
 

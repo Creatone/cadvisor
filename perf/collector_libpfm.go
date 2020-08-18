@@ -197,7 +197,7 @@ func (c *collector) setup() error {
 			customEvent, ok := c.eventToCustomEvent[event]
 			if ok {
 				config := c.createConfigFromRawEvent(customEvent)
-				leaderFileDescriptors, err = c.registerEvent(eventInfo{string(customEvent.Name), config, cgroupFd, i, isGroupLeader}, leaderFileDescriptors)
+				leaderFileDescriptors, err = c.registerEvent(eventInfo{string(customEvent.Name), config, cgroupFd, i, isGroupLeader, customEvent.ExcludeGuest}, leaderFileDescriptors)
 				if err != nil {
 					return err
 				}
@@ -206,7 +206,7 @@ func (c *collector) setup() error {
 				if err != nil {
 					return err
 				}
-				leaderFileDescriptors, err = c.registerEvent(eventInfo{string(event), config, cgroupFd, i, isGroupLeader}, leaderFileDescriptors)
+				leaderFileDescriptors, err = c.registerEvent(eventInfo{string(event), config, cgroupFd, i, isGroupLeader, false}, leaderFileDescriptors)
 				if err != nil {
 					return err
 				}
@@ -253,6 +253,7 @@ type eventInfo struct {
 	pid           int
 	groupIndex    int
 	isGroupLeader bool
+	excludeGuest  bool
 }
 
 func (c *collector) registerEvent(event eventInfo, leaderFileDescriptors map[int]int) (map[int]int, error) {
@@ -266,7 +267,7 @@ func (c *collector) registerEvent(event eventInfo, leaderFileDescriptors map[int
 		flags = unix.PERF_FLAG_FD_CLOEXEC
 	}
 
-	setAttributes(event.config, event.isGroupLeader)
+	setAttributes(event.config, event.isGroupLeader, event.excludeGuest)
 
 	for _, cpu := range c.onlineCPUs {
 		fd, err := unix.PerfEventOpen(event.config, pid, cpu, leaderFileDescriptors[cpu], flags)
@@ -342,14 +343,18 @@ func createPerfEventAttr(event CustomEvent) *unix.PerfEventAttr {
 	return config
 }
 
-func setAttributes(config *unix.PerfEventAttr, leader bool) {
+func setAttributes(config *unix.PerfEventAttr, leader bool, excludeGuest bool) {
 	config.Sample_type = unix.PERF_SAMPLE_IDENTIFIER
 	config.Read_format = unix.PERF_FORMAT_TOTAL_TIME_ENABLED | unix.PERF_FORMAT_TOTAL_TIME_RUNNING | unix.PERF_FORMAT_GROUP | unix.PERF_FORMAT_ID
-	config.Bits = unix.PerfBitInherit | unix.PerfBitExcludeGuest
+	config.Bits = unix.PerfBitInherit
 
 	// Group leader should have this flag set to disable counting until all group would be prepared.
 	if leader {
 		config.Bits |= unix.PerfBitDisabled
+	}
+
+	if excludeGuest {
+		config.Bits |= unix.PerfBitExcludeGuest
 	}
 
 	config.Size = uint32(unsafe.Sizeof(unix.PerfEventAttr{}))

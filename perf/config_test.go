@@ -38,6 +38,12 @@ func TestConfigParsing(t *testing.T) {
 	assert.Equal(t, false, events.Core.Events[1].array)
 	assert.Equal(t, Event("cycles"), events.Core.Events[1].events[0])
 
+	assert.Len(t, events.Core.CustomEvents, 1)
+	assert.Equal(t, Config{0x5300c0}, events.Core.CustomEvents[0].Config)
+	assert.Equal(t, uint32(0x04), events.Core.CustomEvents[0].Type)
+	assert.Equal(t, Event("instructions_retired"), events.Core.CustomEvents[0].Name)
+	assert.Equal(t, true, events.Core.CustomEvents[0].ExcludeGuest)
+
 	assert.Len(t, events.Uncore.Events, 3)
 	assert.Equal(t, Event("cas_count_write"), events.Uncore.Events[0].events[0])
 	assert.Equal(t, Event("uncore_imc_0/UNC_M_CAS_COUNT:RD"), events.Uncore.Events[1].events[0])

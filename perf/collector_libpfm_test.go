@@ -22,6 +22,8 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/stretchr/testify/assert"
 
 	info "github.com/google/cadvisor/info/v1"
@@ -146,19 +148,48 @@ func TestCollector_UpdateStats(t *testing.T) {
 	})
 }
 
+var createPerfEventAttrCases = []struct {
+	event         CustomEvent
+	perfEventAttr unix.PerfEventAttr
+}{
+	{
+		CustomEvent{
+			Type:         0x1,
+			Config:       Config{0x2, 0x3, 0x4},
+			Name:         "fake_event",
+			ExcludeGuest: false,
+		},
+		unix.PerfEventAttr{
+			Type:   0x1,
+			Config: 0x2,
+			Ext1:   0x3,
+			Ext2:   0x4,
+		},
+	},
+	{
+		CustomEvent{
+			Type:         0x4,
+			Config:       Config{0x5, 0x1, 0x4},
+			Name:         "another_fake_event",
+			ExcludeGuest: true,
+		},
+		unix.PerfEventAttr{
+			Type:   0x4,
+			Config: 0x5,
+			Ext1:   0x1,
+			Ext2:   0x4,
+		},
+	},
+}
+
 func TestCreatePerfEventAttr(t *testing.T) {
-	event := CustomEvent{
-		Type:   0x1,
-		Config: Config{uint64(0x2), uint64(0x3), uint64(0x4)},
-		Name:   "fake_event",
+	for _, testCase := range createPerfEventAttrCases {
+		attributes := createPerfEventAttr(testCase.event)
+		assert.Equal(t, testCase.perfEventAttr.Type, attributes.Type)
+		assert.Equal(t, testCase.perfEventAttr.Config, attributes.Config)
+		assert.Equal(t, testCase.perfEventAttr.Ext1, attributes.Ext1)
+		assert.Equal(t, testCase.perfEventAttr.Ext2, attributes.Ext2)
 	}
-
-	attributes := createPerfEventAttr(event)
-
-	assert.Equal(t, uint32(1), attributes.Type)
-	assert.Equal(t, uint64(2), attributes.Config)
-	assert.Equal(t, uint64(3), attributes.Ext1)
-	assert.Equal(t, uint64(4), attributes.Ext2)
 }
 
 func TestSetGroupAttributes(t *testing.T) {
@@ -169,13 +200,13 @@ func TestSetGroupAttributes(t *testing.T) {
 	}
 
 	attributes := createPerfEventAttr(event)
-	setAttributes(attributes, true)
+	setAttributes(attributes, true, true)
 	assert.Equal(t, uint64(65536), attributes.Sample_type)
 	assert.Equal(t, uint64(0xf), attributes.Read_format)
 	assert.Equal(t, uint64(0x100003), attributes.Bits)
 
 	attributes = createPerfEventAttr(event)
-	setAttributes(attributes, false)
+	setAttributes(attributes, false, true)
 	assert.Equal(t, uint64(65536), attributes.Sample_type)
 	assert.Equal(t, uint64(0xf), attributes.Read_format)
 	assert.Equal(t, uint64(0x100002), attributes.Bits)

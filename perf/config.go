@@ -56,6 +56,9 @@ type CustomEvent struct {
 
 	// Human readable name of metric that will be created from the event.
 	Name Event `json:"name"`
+
+	// See exclude_guest parameter documentation at man perf_event_open.
+	ExcludeGuest bool `json:"exclude_guest,omitempty"`
 }
 
 type Config []uint64
