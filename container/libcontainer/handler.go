@@ -51,12 +51,13 @@ var (
 )
 
 type Handler struct {
-	cgroupManager   cgroups.Manager
-	rootFs          string
-	pid             int
-	includedMetrics container.MetricSet
-	pidMetricsCache map[int]*info.CpuSchedstat
-	cycles          uint64
+	cgroupManager    cgroups.Manager
+	rootFs           string
+	pid              int
+	includedMetrics  container.MetricSet
+	pidMetricsCache  map[int]*info.CpuSchedstat
+	cycles           uint64
+	referencedMemory uint64
 }
 
 func NewHandler(cgroupManager cgroups.Manager, rootFs string, pid int, includedMetrics container.MetricSet) *Handler {
@@ -110,7 +111,8 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 		if err != nil {
 			klog.V(4).Infof("Could not get PIDs for container %d: %v", h.pid, err)
 		} else {
-			stats.ReferencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
+			// stats.ReferencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
+			stats.ReferencedMemory = h.referencedMemory
 			if err != nil {
 				klog.V(4).Infof("Unable to get referenced bytes: %v", err)
 			}
@@ -756,6 +758,17 @@ func (h *Handler) GetProcesses() ([]int, error) {
 		return nil, err
 	}
 	return pids, nil
+}
+
+func (h *Handler) Start() {
+	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
+		h.referencedMemory = 0
+		go h.readSmaps()
+	}
+}
+
+func (h *Handler) readSmaps() {
+
 }
 
 func minUint32(x, y uint32) uint32 {
