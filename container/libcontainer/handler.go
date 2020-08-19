@@ -107,7 +107,7 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 
 	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
 		h.cycles++
-		pids, err := h.cgroupManager.GetPids()
+		// pids, err := h.cgroupManager.GetPids()
 		if err != nil {
 			klog.V(4).Infof("Could not get PIDs for container %d: %v", h.pid, err)
 		} else {
@@ -767,8 +767,10 @@ func (h *Handler) Start() {
 	}
 }
 
-func (h *Handler) readSmaps() {
-
+func (h *Handler) readSmaps() error {
+	pids, err := h.cgroupManager.GetPids()
+	h.referencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
+	return err
 }
 
 func minUint32(x, y uint32) uint32 {
