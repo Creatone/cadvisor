@@ -231,6 +231,9 @@ func (h *containerdContainerHandler) Type() container.ContainerType {
 }
 
 func (h *containerdContainerHandler) Start() {
+	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
+		go h.libcontainerHandler.ReadSmaps()
+	}
 }
 
 func (h *containerdContainerHandler) Cleanup() {

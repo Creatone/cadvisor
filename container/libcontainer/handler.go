@@ -760,16 +760,12 @@ func (h *Handler) GetProcesses() ([]int, error) {
 	return pids, nil
 }
 
-func (h *Handler) Start() {
-	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
-		h.referencedMemory = 0
-		go h.readSmaps()
-	}
-}
-
-func (h *Handler) readSmaps() error {
+func (h *Handler) ReadSmaps() error {
 	pids, err := h.cgroupManager.GetPids()
-	h.referencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
+	for {
+		h.referencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
+		time.Sleep(10 * time.Second)
+	}
 	return err
 }
 

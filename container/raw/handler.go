@@ -110,7 +110,11 @@ func (h *rawContainerHandler) GetRootNetworkDevices() ([]info.NetInfo, error) {
 }
 
 // Nothing to start up.
-func (h *rawContainerHandler) Start() {}
+func (h *rawContainerHandler) Start() {
+	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
+		go h.libcontainerHandler.ReadSmaps()
+	}
+}
 
 // Nothing to clean up.
 func (h *rawContainerHandler) Cleanup() {}

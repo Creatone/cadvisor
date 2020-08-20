@@ -328,6 +328,9 @@ func (h *dockerFsHandler) Usage() common.FsUsage {
 }
 
 func (h *dockerContainerHandler) Start() {
+	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
+		go h.libcontainerHandler.ReadSmaps()
+	}
 	if h.fsHandler != nil {
 		h.fsHandler.Start()
 	}
