@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/cadvisor/container"
@@ -42,22 +43,27 @@ import (
 var (
 	whitelistedUlimits      = [...]string{"max_open_files"}
 	referencedResetInterval = flag.Uint64("referenced_reset_interval", 0,
-		"Reset interval for referenced bytes (container_referenced_bytes metric), number of measurement cycles after which referenced bytes are cleared, if set to 0 referenced bytes are never cleared (default: 0)")
+		"Reset interval for referenced bytes (container_referenced_bytes metric), number of seconds after which referenced bytes are cleared, if set to 0 referenced bytes are never cleared (default: 0)")
+
+	referencedReadInterval = flag.Uint64("referenced_read_interval", 0, "Read interval for referenced bytes (container_referenced_bytes metric), number of seconds after which referenced bytes are read, if set to 0 referenced bytes are never read (default: 0)")
+	// mutexa
 
 	smapsFilePathPattern     = "/proc/%d/smaps"
+	smaps_rollupFilePattern  = "/proc/%d/smaps_rollup"
 	clearRefsFilePathPattern = "/proc/%d/clear_refs"
 
 	referencedRegexp = regexp.MustCompile(`Referenced:\s*([0-9]+)\s*kB`)
 )
 
 type Handler struct {
-	cgroupManager    cgroups.Manager
-	rootFs           string
-	pid              int
-	includedMetrics  container.MetricSet
-	pidMetricsCache  map[int]*info.CpuSchedstat
-	cycles           uint64
-	referencedMemory uint64
+	cgroupManager         cgroups.Manager
+	rootFs                string
+	pid                   int
+	includedMetrics       container.MetricSet
+	pidMetricsCache       map[int]*info.CpuSchedstat
+	cycles                uint64
+	referencedMemory      uint64
+	referencedMemoryMutex sync.Mutex
 }
 
 func NewHandler(cgroupManager cgroups.Manager, rootFs string, pid int, includedMetrics container.MetricSet) *Handler {
@@ -362,25 +368,31 @@ func schedulerStatsFromProcs(rootFs string, pids []int, pidMetricsCache map[int]
 
 // referencedBytesStat gets and clears referenced bytes
 // see: https://github.com/brendangregg/wss#wsspl-referenced-page-flag
-func referencedBytesStat(pids []int, cycles uint64, resetInterval uint64) (uint64, error) {
-	referencedKBytes, err := getReferencedKBytes(pids)
-	if err != nil {
-		return uint64(0), err
-	}
+// func referencedBytesStat(pids []int, cycles uint64, resetInterval uint64) (uint64, error) {
+// 	referencedKBytes, err := getReferencedKBytes(pids)
+// 	if err != nil {
+// 		return uint64(0), err
+// 	}
 
-	err = clearReferencedBytes(pids, cycles, resetInterval)
-	if err != nil {
-		return uint64(0), err
-	}
-	return referencedKBytes * 1024, nil
-}
+// 	err = clearReferencedBytes(pids, cycles, resetInterval)
+// 	if err != nil {
+// 		return uint64(0), err
+// 	}
+// 	return referencedKBytes * 1024, nil
+// }
 
 func getReferencedKBytes(pids []int) (uint64, error) {
 	referencedKBytes := uint64(0)
 	readSmapsContent := false
 	foundMatch := false
+	smapsFilePath := ""
 	for _, pid := range pids {
-		smapsFilePath := fmt.Sprintf(smapsFilePathPattern, pid)
+		smapsRollupFilePath := fmt.Sprintf(smaps_rollupFilePattern, pid)
+		if _, err := os.Stat(smapsRollupFilePath); err == nil {
+			smapsFilePath = smapsRollupFilePath
+		} else {
+			smapsFilePath = fmt.Sprintf(smapsFilePathPattern, pid)
+		}
 		smapsContent, err := ioutil.ReadFile(smapsFilePath)
 		if err != nil {
 			klog.V(5).Infof("Cannot read %s file, err: %s", smapsFilePath, err)
@@ -420,29 +432,25 @@ func getReferencedKBytes(pids []int) (uint64, error) {
 	return referencedKBytes, nil
 }
 
-func clearReferencedBytes(pids []int, cycles uint64, resetInterval uint64) error {
-	if resetInterval == 0 {
-		return nil
-	}
+func clearReferencedBytes(pids []int) error {
 
-	if cycles%resetInterval == 0 {
-		for _, pid := range pids {
-			clearRefsFilePath := fmt.Sprintf(clearRefsFilePathPattern, pid)
-			clerRefsFile, err := os.OpenFile(clearRefsFilePath, os.O_WRONLY, 0644)
-			if err != nil {
-				// clear_refs file may not exist for all PIDs
-				continue
-			}
-			_, err = clerRefsFile.WriteString("1\n")
-			if err != nil {
-				return err
-			}
-			err = clerRefsFile.Close()
-			if err != nil {
-				return err
-			}
+	for _, pid := range pids {
+		clearRefsFilePath := fmt.Sprintf(clearRefsFilePathPattern, pid)
+		clerRefsFile, err := os.OpenFile(clearRefsFilePath, os.O_WRONLY, 0644)
+		if err != nil {
+			// clear_refs file may not exist for all PIDs
+			continue
+		}
+		_, err = clerRefsFile.WriteString("1\n")
+		if err != nil {
+			return err
+		}
+		err = clerRefsFile.Close()
+		if err != nil {
+			return err
 		}
 	}
+
 	return nil
 }
 
@@ -760,11 +768,54 @@ func (h *Handler) GetProcesses() ([]int, error) {
 	return pids, nil
 }
 
-func (h *Handler) ReadSmaps() error {
-	pids, err := h.cgroupManager.GetPids()
+func (h *Handler) ResetWss() error {
+	var err error = nil
+	if *referencedResetInterval == 0 {
+		return err
+	}
 	for {
-		h.referencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
-		time.Sleep(10 * time.Second)
+		pids, err := h.cgroupManager.GetPids()
+		if err != nil {
+			klog.Errorf("Failed to collect pids for handler %s", h.rootFs)
+			continue
+		}
+		if len(pids) == 0 && err == nil {
+			klog.Warning("Tried to read an empty container, canceling WSS collection")
+			break
+		}
+		h.referencedMemoryMutex.Lock()
+		clearReferencedBytes(pids)
+		h.referencedMemoryMutex.Unlock()
+		time.Sleep(time.Duration(*referencedResetInterval) * time.Second)
+	}
+	return err
+}
+func (h *Handler) ReadSmaps() error {
+	var err error = nil
+	if *referencedReadInterval == 0 {
+		return err
+	}
+	for {
+		pids, err := h.cgroupManager.GetPids()
+		if err != nil {
+			klog.Errorf("Failed to collect pids for handler %s", h.rootFs)
+			continue
+		}
+		if len(pids) == 0 && err == nil {
+			klog.Warning("Tried to read an empty container, canceling WSS collection")
+			break
+		}
+		start := time.Now()
+		h.referencedMemoryMutex.Lock()
+		h.referencedMemory, err = getReferencedKBytes(pids)
+		h.referencedMemoryMutex.Unlock()
+		elapsed := uint64(time.Since(start) / 1000000) //from nanoseconds to seconds
+		if elapsed > *referencedReadInterval {
+			klog.Warningf("Exceeded referenced read interval for %s", h.rootFs)
+			elapsed = elapsed % *referencedReadInterval
+		}
+		toSleep := *referencedReadInterval - elapsed
+		time.Sleep(time.Duration(toSleep) * time.Second)
 	}
 	return err
 }
