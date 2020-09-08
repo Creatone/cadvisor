@@ -112,12 +112,18 @@ func (h *rawContainerHandler) GetRootNetworkDevices() ([]info.NetInfo, error) {
 // Nothing to start up.
 func (h *rawContainerHandler) Start() {
 	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
-		go h.libcontainerHandler.ReadSmaps()
+		go h.libcontainerHandler.ReadSmaps(h.name)
+		go h.libcontainerHandler.ResetWss(h.name)
 	}
 }
 
 // Nothing to clean up.
-func (h *rawContainerHandler) Cleanup() {}
+func (h *rawContainerHandler) Cleanup() {
+	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
+		h.libcontainerHandler.ReferencedMemoryStopper <- true
+		h.libcontainerHandler.ReferencedMemoryStopper <- true
+	}
+}
 
 func (h *rawContainerHandler) GetSpec() (info.ContainerSpec, error) {
 	const hasNetwork = false

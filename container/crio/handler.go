@@ -195,7 +195,8 @@ func newCrioContainerHandler(
 
 func (h *crioContainerHandler) Start() {
 	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
-		go h.libcontainerHandler.ReadSmaps()
+		go h.libcontainerHandler.ReadSmaps(h.name)
+		go h.libcontainerHandler.ResetWss(h.name)
 	}
 	if h.fsHandler != nil {
 		h.fsHandler.Start()
@@ -205,6 +206,10 @@ func (h *crioContainerHandler) Start() {
 func (h *crioContainerHandler) Cleanup() {
 	if h.fsHandler != nil {
 		h.fsHandler.Stop()
+	}
+	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
+		h.libcontainerHandler.ReferencedMemoryStopper <- true
+		h.libcontainerHandler.ReferencedMemoryStopper <- true
 	}
 }
 

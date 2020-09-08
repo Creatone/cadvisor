@@ -56,23 +56,25 @@ var (
 )
 
 type Handler struct {
-	cgroupManager         cgroups.Manager
-	rootFs                string
-	pid                   int
-	includedMetrics       container.MetricSet
-	pidMetricsCache       map[int]*info.CpuSchedstat
-	cycles                uint64
-	referencedMemory      uint64
-	referencedMemoryMutex sync.Mutex
+	cgroupManager           cgroups.Manager
+	rootFs                  string
+	pid                     int
+	includedMetrics         container.MetricSet
+	pidMetricsCache         map[int]*info.CpuSchedstat
+	cycles                  uint64
+	referencedMemory        uint64
+	referencedMemoryMutex   sync.Mutex
+	ReferencedMemoryStopper chan bool
 }
 
 func NewHandler(cgroupManager cgroups.Manager, rootFs string, pid int, includedMetrics container.MetricSet) *Handler {
 	return &Handler{
-		cgroupManager:   cgroupManager,
-		rootFs:          rootFs,
-		pid:             pid,
-		includedMetrics: includedMetrics,
-		pidMetricsCache: make(map[int]*info.CpuSchedstat),
+		cgroupManager:           cgroupManager,
+		rootFs:                  rootFs,
+		pid:                     pid,
+		includedMetrics:         includedMetrics,
+		pidMetricsCache:         make(map[int]*info.CpuSchedstat),
+		ReferencedMemoryStopper: make(chan bool, 2),
 	}
 }
 
@@ -390,6 +392,7 @@ func getReferencedKBytes(pids []int) (uint64, error) {
 		smapsRollupFilePath := fmt.Sprintf(smaps_rollupFilePattern, pid)
 		if _, err := os.Stat(smapsRollupFilePath); err == nil {
 			smapsFilePath = smapsRollupFilePath
+			klog.V(6).Infof("Using smaps_rollup for pid %d instead of smaps", pid)
 		} else {
 			smapsFilePath = fmt.Sprintf(smapsFilePathPattern, pid)
 		}
@@ -768,54 +771,74 @@ func (h *Handler) GetProcesses() ([]int, error) {
 	return pids, nil
 }
 
-func (h *Handler) ResetWss() error {
+func (h *Handler) ResetWss(containerName string) error {
 	var err error = nil
+	stop := false
 	if *referencedResetInterval == 0 {
 		return err
 	}
 	for {
-		pids, err := h.cgroupManager.GetPids()
-		if err != nil {
-			klog.Errorf("Failed to collect pids for handler %s", h.rootFs)
-			continue
+		select {
+		case stop = <-h.ReferencedMemoryStopper:
+			if stop {
+				klog.V(5).Infof("Finished reseting wss for %s", containerName)
+				break
+			}
+		default:
+			pids, err := h.cgroupManager.GetPids()
+			if err != nil {
+				klog.Warningf("Reset failed to collect pids for handler %s", containerName)
+				continue
+			}
+			if len(pids) == 0 && err == nil {
+				klog.Warningf("Tried to reset wss for an empty container for %s", containerName)
+				continue
+			}
+			h.referencedMemoryMutex.Lock()
+			clearReferencedBytes(pids)
+			h.referencedMemoryMutex.Unlock()
+			time.Sleep(time.Duration(*referencedResetInterval) * time.Second)
 		}
-		if len(pids) == 0 && err == nil {
-			klog.Warning("Tried to read an empty container, canceling WSS collection")
-			break
-		}
-		h.referencedMemoryMutex.Lock()
-		clearReferencedBytes(pids)
-		h.referencedMemoryMutex.Unlock()
-		time.Sleep(time.Duration(*referencedResetInterval) * time.Second)
 	}
 	return err
 }
-func (h *Handler) ReadSmaps() error {
+
+func (h *Handler) ReadSmaps(containerName string) error {
 	var err error = nil
+	stop := false
+	klog.Infof("Starting WSS collection for %s", containerName)
 	if *referencedReadInterval == 0 {
 		return err
 	}
 	for {
-		pids, err := h.cgroupManager.GetPids()
-		if err != nil {
-			klog.Errorf("Failed to collect pids for handler %s", h.rootFs)
-			continue
+		select {
+		case stop = <-h.ReferencedMemoryStopper:
+			if stop {
+				klog.V(5).Infof("Finished collecting wss for %s", containerName)
+				break
+			}
+		default:
+			pids, err := h.cgroupManager.GetPids()
+			if err != nil {
+				klog.Errorf("Failed to collect pids for handler %s", containerName)
+				continue
+			}
+			if len(pids) == 0 && err == nil {
+				klog.Warningf("Tried to read an empty container, canceling WSS collection for %s", containerName)
+				continue
+			}
+			start := time.Now()
+			h.referencedMemoryMutex.Lock()
+			h.referencedMemory, err = getReferencedKBytes(pids)
+			h.referencedMemoryMutex.Unlock()
+			elapsed := uint64(time.Since(start) / 1000000) //from nanoseconds to seconds
+			if elapsed > *referencedReadInterval {
+				klog.Warningf("Exceeded referenced read interval for %s", containerName)
+				elapsed = elapsed % *referencedReadInterval
+			}
+			toSleep := *referencedReadInterval - elapsed
+			time.Sleep(time.Duration(toSleep) * time.Second)
 		}
-		if len(pids) == 0 && err == nil {
-			klog.Warning("Tried to read an empty container, canceling WSS collection")
-			break
-		}
-		start := time.Now()
-		h.referencedMemoryMutex.Lock()
-		h.referencedMemory, err = getReferencedKBytes(pids)
-		h.referencedMemoryMutex.Unlock()
-		elapsed := uint64(time.Since(start) / 1000000) //from nanoseconds to seconds
-		if elapsed > *referencedReadInterval {
-			klog.Warningf("Exceeded referenced read interval for %s", h.rootFs)
-			elapsed = elapsed % *referencedReadInterval
-		}
-		toSleep := *referencedReadInterval - elapsed
-		time.Sleep(time.Duration(toSleep) * time.Second)
 	}
 	return err
 }
