@@ -117,7 +117,7 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 		if err != nil {
 			klog.V(4).Infof("Could not get PIDs for container %d: %v", h.pid, err)
 		} else {
-			stats.ReferencedMemory = h.referencedMemory
+			stats.ReferencedMemory = h.referencedMemory * 1024
 			if err != nil {
 				klog.V(4).Infof("Unable to get referenced bytes: %v", err)
 			}
