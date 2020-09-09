@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"regexp"
@@ -762,6 +763,9 @@ func (h *Handler) ResetWss(containerName string) error {
 	if *referencedResetInterval == time.Duration(0) {
 		return err
 	}
+	tmp := *referencedResetInterval
+	time.Sleep(time.Duration(rand.Intn(int(tmp.Seconds()))))
+
 	for {
 		select {
 		case <-h.ReferencedMemoryStopper:
@@ -800,6 +804,8 @@ func (h *Handler) ReadSmaps(containerName string) error {
 	if *referencedReadInterval == 0 {
 		return err
 	}
+	tmp := *referencedReadInterval
+	time.Sleep(time.Duration(rand.Intn(int(tmp.Seconds()))))
 	for {
 		select {
 		case <-h.ReferencedMemoryStopper:
