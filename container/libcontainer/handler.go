@@ -782,11 +782,11 @@ func (h *Handler) ResetWss(containerName string) error {
 			clearReferencedBytes(pids)
 			h.referencedMemoryMutex.Unlock()
 			elapsed := time.Since(start)
-			if elapsed > *referencedReadInterval {
+			if elapsed > *referencedResetInterval {
 				klog.Warningf("Exceeded referenced reset interval for %s", containerName)
 				elapsed = elapsed % *referencedResetInterval
 			}
-			toSleep := *referencedReadInterval - elapsed
+			toSleep := *referencedResetInterval - elapsed
 			time.Sleep(toSleep)
 		}
 	}
@@ -825,7 +825,7 @@ func (h *Handler) ReadSmaps(containerName string) error {
 				elapsed = elapsed % *referencedReadInterval
 			}
 			toSleep := *referencedReadInterval - elapsed
-			time.Sleep(time.Duration(toSleep) * time.Second)
+			time.Sleep(toSleep)
 		}
 	}
 	return err
