@@ -770,11 +770,11 @@ func (h *Handler) ResetWss(containerName string) error {
 		default:
 			pids, err := h.cgroupManager.GetPids()
 			if err != nil {
-				klog.Warningf("Reset failed to collect pids for handler %s", containerName)
+				klog.V(5).Infof("Reset failed to collect pids for handler %s", containerName)
 				continue
 			}
 			if len(pids) == 0 && err == nil {
-				klog.Warningf("Tried to reset wss for an empty container for %s", containerName)
+				klog.V(5).Infof("Tried to reset wss for an empty container for %s", containerName)
 				continue
 			}
 			start := time.Now()
@@ -808,11 +808,11 @@ func (h *Handler) ReadSmaps(containerName string) error {
 		default:
 			pids, err := h.cgroupManager.GetPids()
 			if err != nil {
-				klog.Errorf("Failed to collect pids for handler %s", containerName)
+				klog.V(5).Infof("Failed to collect pids for handler %s", containerName)
 				continue
 			}
 			if len(pids) == 0 && err == nil {
-				klog.Warningf("Tried to read an empty container, canceling WSS collection for %s", containerName)
+				klog.V(5).Infof("Tried to read an empty container, canceling WSS collection for %s", containerName)
 				continue
 			}
 			start := time.Now()
