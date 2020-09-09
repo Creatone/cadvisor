@@ -42,11 +42,10 @@ import (
 
 var (
 	whitelistedUlimits      = [...]string{"max_open_files"}
-	referencedResetInterval = flag.Uint64("referenced_reset_interval", 0,
-		"Reset interval for referenced bytes (container_referenced_bytes metric), number of seconds after which referenced bytes are cleared, if set to 0 referenced bytes are never cleared (default: 0)")
+	referencedResetInterval = flag.Duration("referenced_reset_interval", time.Duration(0),
+		"Reset interval for referenced bytes (container_referenced_bytes metric), number of seconds after which referenced bytes are cleared, if set to 0 referenced bytes are never cleared (default: 0s)")
 
-	referencedReadInterval = flag.Uint64("referenced_read_interval", 0, "Read interval for referenced bytes (container_referenced_bytes metric), number of seconds after which referenced bytes are read, if set to 0 referenced bytes are never read (default: 0)")
-	// mutexa
+	referencedReadInterval = flag.Duration("referenced_read_interval", time.Duration(0), "Read interval for referenced bytes (container_referenced_bytes metric), number of seconds after which referenced bytes are read, if set to 0 referenced bytes are never read (default: 0s)")
 
 	smapsFilePathPattern     = "/proc/%d/smaps"
 	smaps_rollupFilePattern  = "/proc/%d/smaps_rollup"
@@ -115,11 +114,9 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 
 	if h.includedMetrics.Has(container.ReferencedMemoryMetrics) {
 		h.cycles++
-		// pids, err := h.cgroupManager.GetPids()
 		if err != nil {
 			klog.V(4).Infof("Could not get PIDs for container %d: %v", h.pid, err)
 		} else {
-			// stats.ReferencedMemory, err = referencedBytesStat(pids, h.cycles, *referencedResetInterval)
 			stats.ReferencedMemory = h.referencedMemory
 			if err != nil {
 				klog.V(4).Infof("Unable to get referenced bytes: %v", err)
@@ -370,18 +367,6 @@ func schedulerStatsFromProcs(rootFs string, pids []int, pidMetricsCache map[int]
 
 // referencedBytesStat gets and clears referenced bytes
 // see: https://github.com/brendangregg/wss#wsspl-referenced-page-flag
-// func referencedBytesStat(pids []int, cycles uint64, resetInterval uint64) (uint64, error) {
-// 	referencedKBytes, err := getReferencedKBytes(pids)
-// 	if err != nil {
-// 		return uint64(0), err
-// 	}
-
-// 	err = clearReferencedBytes(pids, cycles, resetInterval)
-// 	if err != nil {
-// 		return uint64(0), err
-// 	}
-// 	return referencedKBytes * 1024, nil
-// }
 
 func getReferencedKBytes(pids []int) (uint64, error) {
 	referencedKBytes := uint64(0)
@@ -771,19 +756,17 @@ func (h *Handler) GetProcesses() ([]int, error) {
 	return pids, nil
 }
 
+// ResetWss to be run as gorutine for non blocking referenced bytes reset
 func (h *Handler) ResetWss(containerName string) error {
 	var err error = nil
-	stop := false
-	if *referencedResetInterval == 0 {
+	if *referencedResetInterval == time.Duration(0) {
 		return err
 	}
 	for {
 		select {
-		case stop = <-h.ReferencedMemoryStopper:
-			if stop {
-				klog.V(5).Infof("Finished reseting wss for %s", containerName)
-				break
-			}
+		case <-h.ReferencedMemoryStopper:
+			klog.V(5).Infof("Finished reseting wss for %s", containerName)
+			break
 		default:
 			pids, err := h.cgroupManager.GetPids()
 			if err != nil {
@@ -794,29 +777,34 @@ func (h *Handler) ResetWss(containerName string) error {
 				klog.Warningf("Tried to reset wss for an empty container for %s", containerName)
 				continue
 			}
+			start := time.Now()
 			h.referencedMemoryMutex.Lock()
 			clearReferencedBytes(pids)
 			h.referencedMemoryMutex.Unlock()
-			time.Sleep(time.Duration(*referencedResetInterval) * time.Second)
+			elapsed := time.Since(start)
+			if elapsed > *referencedReadInterval {
+				klog.Warningf("Exceeded referenced reset interval for %s", containerName)
+				elapsed = elapsed % *referencedResetInterval
+			}
+			toSleep := *referencedReadInterval - elapsed
+			time.Sleep(toSleep)
 		}
 	}
 	return err
 }
 
+// ReadSmaps to be run as gorutine for non blocking referenced bytes read
 func (h *Handler) ReadSmaps(containerName string) error {
 	var err error = nil
-	stop := false
 	klog.Infof("Starting WSS collection for %s", containerName)
 	if *referencedReadInterval == 0 {
 		return err
 	}
 	for {
 		select {
-		case stop = <-h.ReferencedMemoryStopper:
-			if stop {
-				klog.V(5).Infof("Finished collecting wss for %s", containerName)
-				break
-			}
+		case <-h.ReferencedMemoryStopper:
+			klog.V(5).Infof("Finished collecting wss for %s", containerName)
+			break
 		default:
 			pids, err := h.cgroupManager.GetPids()
 			if err != nil {
@@ -831,7 +819,7 @@ func (h *Handler) ReadSmaps(containerName string) error {
 			h.referencedMemoryMutex.Lock()
 			h.referencedMemory, err = getReferencedKBytes(pids)
 			h.referencedMemoryMutex.Unlock()
-			elapsed := uint64(time.Since(start) / 1000000) //from nanoseconds to seconds
+			elapsed := time.Since(start)
 			if elapsed > *referencedReadInterval {
 				klog.Warningf("Exceeded referenced read interval for %s", containerName)
 				elapsed = elapsed % *referencedReadInterval
