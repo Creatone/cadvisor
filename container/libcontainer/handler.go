@@ -118,7 +118,7 @@ func (h *Handler) GetStats() (*info.ContainerStats, error) {
 		if err != nil {
 			klog.V(4).Infof("Could not get PIDs for container %d: %v", h.pid, err)
 		} else {
-			stats.ReferencedMemory = h.referencedMemory / 1024
+			stats.ReferencedMemory = h.referencedMemory * 1024
 			if err != nil {
 				klog.V(4).Infof("Unable to get referenced bytes: %v", err)
 			}
@@ -770,7 +770,8 @@ func (h *Handler) ResetWss(containerName string) error {
 		select {
 		case <-h.ReferencedMemoryStopper:
 			klog.V(5).Infof("Finished reseting wss for %s", containerName)
-			break
+			return err
+
 		default:
 			pids, err := h.cgroupManager.GetPids()
 			if err != nil {
@@ -794,7 +795,6 @@ func (h *Handler) ResetWss(containerName string) error {
 			time.Sleep(toSleep)
 		}
 	}
-	return err
 }
 
 // ReadSmaps to be run as gorutine for non blocking referenced bytes read
@@ -810,7 +810,8 @@ func (h *Handler) ReadSmaps(containerName string) error {
 		select {
 		case <-h.ReferencedMemoryStopper:
 			klog.V(5).Infof("Finished collecting wss for %s", containerName)
-			break
+			return err
+
 		default:
 			pids, err := h.cgroupManager.GetPids()
 			if err != nil {
@@ -834,7 +835,6 @@ func (h *Handler) ReadSmaps(containerName string) error {
 			time.Sleep(toSleep)
 		}
 	}
-	return err
 }
 
 func minUint32(x, y uint32) uint32 {
