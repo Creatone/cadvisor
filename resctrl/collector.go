@@ -18,8 +18,12 @@
 package resctrl
 
 import (
+	"bytes"
+	"io/ioutil"
 	"k8s.io/klog/v2"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	info "github.com/google/cadvisor/info/v1"
 
@@ -29,6 +33,7 @@ import (
 
 const (
 	rootContainerID = "/"
+	tasks           = "tasks"
 )
 
 type collector struct {
@@ -49,9 +54,9 @@ func newCollector(id string) (*collector, error) {
 
 	var pidsPath string
 	if cgroups.IsCgroup2UnifiedMode() {
-		pidsPath = filepath.Join("/sys/fs/cgroup", id)
+		pidsPath = filepath.Join("/sys/fs/cgroup", id, tasks)
 	} else {
-		pidsPath = filepath.Join("/sys/fs/cgroup/cpu", id)
+		pidsPath = filepath.Join("/sys/fs/cgroup/cpu", id, tasks)
 	}
 
 	collector := &collector{
@@ -76,13 +81,17 @@ func newCollector(id string) (*collector, error) {
 }
 
 func (c *collector) updatePids() error {
-	pids, err := cgroups.GetPids(c.pidsPath)
+	pidsFile, err := ioutil.ReadFile(c.pidsPath)
 	if err != nil {
 		return err
 	}
-
+	pids := strings.Split(string(bytes.TrimSpace(pidsFile)), "\n")
 	for _, pid := range pids {
-		err := c.resctrl.Apply(pid)
+		pid, err := strconv.Atoi(pid)
+		if err != nil {
+			return err
+		}
+		err = c.resctrl.Apply(pid)
 		if err != nil {
 			return err
 		}
