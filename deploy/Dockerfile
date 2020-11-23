@@ -63,7 +63,7 @@ COPY --from=build /usr/share/ipmctl /usr/share/ipmctl
 
 EXPOSE 9101
 
-ENV CADVISOR_HEALTHCHECK_URL=http://localhost:8080/healthz
+ENV CADVISOR_HEALTHCHECK_URL=http://localhost:9101/healthz
 
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD wget --quiet --tries=1 --spider $CADVISOR_HEALTHCHECK_URL || exit 1
