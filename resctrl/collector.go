@@ -19,26 +19,30 @@ package resctrl
 
 import (
 	info "github.com/google/cadvisor/info/v1"
-	"github.com/google/cadvisor/stats"
+
+	"k8s.io/klog/v2"
 
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type collector struct {
-	resctrl intelrdt.IntelRdtManager
-	stats.NoopDestroy
+	resctrl intelrdt.Manager
+	id string
 }
 
 func newCollector(id string, resctrlPath string) *collector {
 	collector := &collector{
-		resctrl: intelrdt.IntelRdtManager{
-			Config: &configs.Config{
-				IntelRdt: &configs.IntelRdt{},
+		intelrdt.NewManager(
+			&configs.Config{
+				IntelRdt: &configs.IntelRdt{
+					EnableCMT:     intelrdt.IsCMTEnabled(),
+					EnableMBM:     intelrdt.IsMBMEnabled(),
+				},
 			},
-			Id:   id,
-			Path: resctrlPath,
-		},
+			id,
+			resctrlPath),
+			id,
 	}
 
 	return collector
@@ -71,4 +75,13 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 	}
 
 	return nil
+}
+
+func (c *collector) Destroy() {
+	if c.id != "/" {
+		err := c.resctrl.Destroy()
+		if err != nil {
+			klog.V(5).Error(err, "couldn't destroy resctrl")
+		}
+	}
 }

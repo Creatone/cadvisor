@@ -18,30 +18,34 @@
 package resctrl
 
 import (
-	"os"
-
 	"github.com/google/cadvisor/stats"
+	"sync"
+
+	"k8s.io/klog/v2"
 
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type manager struct {
-	id string
 	stats.NoopDestroy
+	mu sync.Mutex
 }
 
-func (m manager) GetCollector(resctrlPath string) (stats.Collector, error) {
-	if _, err := os.Stat(resctrlPath); err != nil {
+func (m *manager) GetCollector(containerName string) (stats.Collector, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	resctrlPath, err := GetResctrlPath(containerName)
+	if err != nil {
+		klog.V(4).Infof("Error getting resctrl path: %q", err)
 		return &stats.NoopCollector{}, err
 	}
-	collector := newCollector(m.id, resctrlPath)
-	return collector, nil
+
+	return newCollector(containerName, resctrlPath), nil
 }
 
-func NewManager(id string) (stats.Manager, error) {
-
+func NewManager(_ string) (stats.Manager, error) {
 	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
-		return &manager{id: id}, nil
+		return &manager{mu: sync.Mutex{}}, nil
 	}
 
 	return &stats.NoopManager{}, nil
