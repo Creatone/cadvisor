@@ -31,4 +31,4 @@ require (
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 )
 
-replace github.com/opencontainers/runc v1.0.0-rc92 => github.com/Creatone/runc v1.0.0-rc17
+replace github.com/opencontainers/runc v1.0.0-rc92 => github.com/Creatone/runc v1.0.0-rc19
