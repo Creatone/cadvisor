@@ -1,6 +1,6 @@
 // +build linux
 
-// Copyright 2020 Google Inc. All Rights Reserved.
+// Copyright 2021 Google Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,27 +18,21 @@
 package resctrl
 
 import (
-	info "github.com/google/cadvisor/info/v1"
-	"github.com/google/cadvisor/stats"
+	"k8s.io/klog/v2"
+	"os"
 
-	"github.com/opencontainers/runc/libcontainer/configs"
-	"github.com/opencontainers/runc/libcontainer/intelrdt"
+	info "github.com/google/cadvisor/info/v1"
 )
 
 type collector struct {
-	resctrl intelrdt.IntelRdtManager
-	stats.NoopDestroy
+	id string
+	resctrlPath string
 }
 
 func newCollector(id string, resctrlPath string) *collector {
 	collector := &collector{
-		resctrl: intelrdt.IntelRdtManager{
-			Config: &configs.Config{
-				IntelRdt: &configs.IntelRdt{},
-			},
-			Id:   id,
-			Path: resctrlPath,
-		},
+		id: id,
+		resctrlPath: resctrlPath,
 	}
 
 	return collector
@@ -47,11 +41,10 @@ func newCollector(id string, resctrlPath string) *collector {
 func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 	stats.Resctrl = info.ResctrlStats{}
 
-	resctrlStats, err := c.resctrl.GetStats()
+	resctrlStats, err := getStats(c.resctrlPath)
 	if err != nil {
 		return err
 	}
-
 	numberOfNUMANodes := len(*resctrlStats.MBMStats)
 
 	stats.Resctrl.MemoryBandwidth = make([]info.MemoryBandwidthStats, 0, numberOfNUMANodes)
@@ -71,4 +64,13 @@ func (c *collector) UpdateStats(stats *info.ContainerStats) error {
 	}
 
 	return nil
+}
+
+func (c *collector) Destroy() {
+	if c.id != "/" {
+		err := os.RemoveAll(c.resctrlPath)
+		if err != nil {
+			klog.Errorf("Couldn't destroy container %v: %v", c.id, err)
+		}
+	}
 }
