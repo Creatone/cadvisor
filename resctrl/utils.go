@@ -64,13 +64,19 @@ func GetResctrlPath(containerName string) (string, error) {
 	}
 
 	for _, pid := range pids {
-		err = intelrdt.WriteIntelRdtTasks(monGroupPath, pid)
+		processThreads, err := intelrdt.GetAllProcessPids(pid)
 		if err != nil {
-			secondError := os.Remove(monGroupPath)
-			if secondError != nil {
-				return "", fmt.Errorf("%v : %v", err, secondError)
-			}
 			return "", err
+		}
+		for _, thread := range processThreads {
+			err = intelrdt.WriteIntelRdtTasks(monGroupPath, thread)
+			if err != nil {
+				secondError := os.Remove(monGroupPath)
+				if secondError != nil {
+					return "", fmt.Errorf("%v : %v", err, secondError)
+				}
+				return "", err
+			}
 		}
 	}
 
