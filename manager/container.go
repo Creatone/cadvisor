@@ -122,6 +122,7 @@ func (cd *containerData) Stop() error {
 	}
 	close(cd.stop)
 	cd.perfCollector.Destroy()
+	cd.resctrlCollector.Destroy()
 	return nil
 }
 

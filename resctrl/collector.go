@@ -18,24 +18,49 @@
 package resctrl
 
 import (
-	"k8s.io/klog/v2"
 	"os"
 
 	info "github.com/google/cadvisor/info/v1"
+
+	"k8s.io/klog/v2"
 )
 
 type collector struct {
-	id string
+	id          string
 	resctrlPath string
+	running     bool
 }
 
-func newCollector(id string, resctrlPath string) *collector {
-	collector := &collector{
-		id: id,
-		resctrlPath: resctrlPath,
+func newCollector(id string) (*collector, error) {
+	path, err := getResctrlPath(id)
+	if err != nil {
+		return nil, err
 	}
 
-	return collector
+	collector := &collector{
+		id:          id,
+		resctrlPath: path,
+		running:     true,
+	}
+
+	return collector, nil
+}
+
+func (c *collector) prepareMonGroup() {
+	if c.id != rootContainer {
+		newPath, err := getResctrlPath(c.id)
+		if err != nil {
+			klog.V(5).Error(err, "couldn't update %v pids", c.id)
+		}
+
+		if newPath != c.resctrlPath {
+			err = os.RemoveAll(c.resctrlPath)
+			if err != nil {
+				klog.V(5).Error(err, "couldn't update %v pids", c.id)
+			}
+			c.resctrlPath = newPath
+		}
+	}
 }
 
 func (c *collector) UpdateStats(stats *info.ContainerStats) error {
@@ -73,4 +98,5 @@ func (c *collector) Destroy() {
 			klog.Errorf("Couldn't destroy container %v: %v", c.id, err)
 		}
 	}
+	c.running = false
 }

@@ -73,7 +73,7 @@ func TestUpdateStats(t *testing.T) {
 	})
 }
 
-func TestDestroy(t *testing.T){
+func TestDestroy(t *testing.T) {
 	rootResctrl = mockResctrl()
 	defer os.RemoveAll(rootResctrl)
 
@@ -86,7 +86,7 @@ func TestDestroy(t *testing.T){
 	path, err := getResctrlPath("container")
 	assert.NoError(t, err)
 
-	collector := newCollector("container", path)
+	collector := newCollector("container")
 
 	if stat, err := os.Stat(path); !stat.IsDir() || err != nil {
 		t.Fail()

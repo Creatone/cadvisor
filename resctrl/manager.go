@@ -18,34 +18,54 @@
 package resctrl
 
 import (
-	"github.com/google/cadvisor/stats"
-	"sync"
+	"time"
 
-	"k8s.io/klog/v2"
+	"github.com/google/cadvisor/stats"
 
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
 )
 
 type manager struct {
 	stats.NoopDestroy
-	mu sync.Mutex
+	interval   time.Duration
+	collectors []*collector
 }
 
 func (m *manager) GetCollector(containerName string) (stats.Collector, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	resctrlPath, err := getResctrlPath(containerName)
+	collector, err := newCollector(containerName)
 	if err != nil {
-		klog.V(4).Infof("Error getting resctrl path: %q", err)
 		return &stats.NoopCollector{}, err
 	}
 
-	return newCollector(containerName, resctrlPath), nil
+	collector.prepareMonGroup()
+
+	m.collectors = append(m.collectors, collector)
+
+	return collector, nil
 }
 
-func NewManager(_ string) (stats.Manager, error) {
+func (m *manager) handleInterval() {
+	if m.interval != 0 {
+		go func() {
+			for {
+				time.Sleep(m.interval)
+				for i := 0; i < len(m.collectors); i++ {
+					if m.collectors[i].running {
+						m.collectors[i].prepareMonGroup()
+					} else {
+						m.collectors = append(m.collectors[:i], m.collectors[i+1:]...)
+					}
+				}
+			}
+		}()
+	}
+}
+
+func NewManager(interval time.Duration) (stats.Manager, error) {
 	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
-		return &manager{mu: sync.Mutex{}}, nil
+		manager := &manager{interval: interval}
+		manager.handleInterval()
+		return manager, nil
 	}
 
 	return &stats.NoopManager{}, nil

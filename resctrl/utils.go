@@ -32,30 +32,30 @@ import (
 )
 
 const (
-	cpuCgroup     = "cpu"
-	rootContainer = "/"
-	monitoringGroupDir = "mon_groups"
-	processTask = "task"
-	cpusFileName = "cpus"
-	cpusListFileName = "cpus_list"
-	schemataFileName = "schemata"
-	tasksFileName = "tasks"
-	infoDirName = "info"
-	monDataDirName = "mon_data"
-	monGroupsDirName = "mon_groups"
-	noPidsError = "there are no pids passed"
-	noContainerError = "there are no container name passed"
-	llcOccupancyFileName = "llc_occupancy"
+	cpuCgroup             = "cpu"
+	rootContainer         = "/"
+	monitoringGroupDir    = "mon_groups"
+	processTask           = "task"
+	cpusFileName          = "cpus"
+	cpusListFileName      = "cpus_list"
+	schemataFileName      = "schemata"
+	tasksFileName         = "tasks"
+	infoDirName           = "info"
+	monDataDirName        = "mon_data"
+	monGroupsDirName      = "mon_groups"
+	noPidsError           = "there are no pids passed"
+	noContainerError      = "there are no container name passed"
+	llcOccupancyFileName  = "llc_occupancy"
 	mbmLocalBytesFileName = "mbm_local_bytes"
 	mbmTotalBytesFileName = "mbm_total_bytes"
 )
 
 var (
 	rootResctrl = ""
-	pidsPath = ""
+	pidsPath    = ""
 	processPath = "/proc"
-	enabledMBM = false
-	enabledCMT = false
+	enabledMBM  = false
+	enabledCMT  = false
 )
 
 func init() {
@@ -96,11 +96,10 @@ func getResctrlPath(containerName string) (string, error) {
 	properContainerName := strings.Replace(containerName, "/", "-", -1)
 	monGroupPath := filepath.Join(path, monitoringGroupDir, properContainerName)
 
-	// Create new mon_group.
-	if stat, _ := os.Stat(monGroupPath); stat != nil {
-		_ = os.Remove(monGroupPath)
+	// Create new mon_group if not exists.
+	if stat, _ := os.Stat(monGroupPath); stat == nil {
+		err = os.Mkdir(monGroupPath, os.ModePerm)
 	}
-	err = os.Mkdir(monGroupPath, os.ModePerm)
 	if err != nil {
 		return "", err
 	}
