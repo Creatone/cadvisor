@@ -19,7 +19,6 @@ package resctrl
 
 import (
 	"fmt"
-	"github.com/opencontainers/runc/libcontainer/intelrdt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -28,6 +27,7 @@ import (
 	"github.com/google/cadvisor/utils/sysfs/fakesysfs"
 
 	"github.com/opencontainers/runc/libcontainer/cgroups"
+	"github.com/opencontainers/runc/libcontainer/intelrdt"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -67,7 +67,7 @@ func mockResctrl() string {
 	path, _ := ioutil.TempDir("", "resctrl")
 
 	var files = []struct {
-		path string
+		path  string
 		touch func(string) error
 	}{
 		// Mock root files.
@@ -157,7 +157,7 @@ func mockResctrlMonData(path string) {
 	touchDir(filepath.Join(path, monDataDirName, "mon_L3_01"))
 
 	var files = []struct {
-		path string
+		path  string
 		value string
 	}{
 		{
@@ -197,7 +197,7 @@ func mockContainersPids() string {
 	// container
 	touchDir(filepath.Join(path, "container"))
 	touch(filepath.Join(path, "container", cgroups.CgroupProcesses))
-	err := fillPids(filepath.Join(path, "container", cgroups.CgroupProcesses), []int{1, 2 ,3})
+	err := fillPids(filepath.Join(path, "container", cgroups.CgroupProcesses), []int{1, 2, 3})
 	if err != nil {
 		return ""
 	}
@@ -216,9 +216,9 @@ func mockProcFs() string {
 	path, _ := ioutil.TempDir("", "proc")
 
 	var files = []struct {
-		path string
+		path  string
 		touch func(string) error
-	} {
+	}{
 		// container
 		{
 			filepath.Join(path, "1", processTask, "1"),
@@ -274,8 +274,8 @@ func TestGetResctrlPath(t *testing.T) {
 
 	var testCases = []struct {
 		container string
-		expected string
-		err string
+		expected  string
+		err       string
 	}{
 		{
 			"container",
@@ -305,10 +305,10 @@ func TestGetPids(t *testing.T) {
 	pidsPath = mockContainersPids()
 	defer os.RemoveAll(pidsPath)
 
-	var testCases = []struct{
+	var testCases = []struct {
 		container string
-		expected []int
-		err string
+		expected  []int
+		err       string
 	}{
 		{
 			"",
@@ -367,19 +367,19 @@ func TestGetAllProcessThreads(t *testing.T) {
 	}
 }
 
-func TestFindControlGroup(t *testing.T){
+func TestFindControlGroup(t *testing.T) {
 	rootResctrl = mockResctrl()
 	defer os.RemoveAll(rootResctrl)
 
 	var testCases = []struct {
-		pids []int
+		pids     []int
 		expected string
-		err string
+		err      string
 	}{
 		{
 			[]int{1, 2, 3, 4},
-				rootResctrl,
-				"",
+			rootResctrl,
+			"",
 		},
 		{
 			[]int{},
@@ -387,7 +387,7 @@ func TestFindControlGroup(t *testing.T){
 			"there are no pids passed",
 		},
 		{
-			[]int{5,6},
+			[]int{5, 6},
 			filepath.Join(rootResctrl, "m1"),
 			"",
 		},
@@ -408,11 +408,11 @@ func TestCheckControlGroup(t *testing.T) {
 	rootResctrl = mockResctrl()
 	defer os.RemoveAll(rootResctrl)
 
-	var testCases = []struct{
+	var testCases = []struct {
 		expected bool
-		err string
-		path string
-		pids []int
+		err      string
+		path     string
+		pids     []int
 	}{
 		{
 			true,
@@ -463,43 +463,83 @@ func TestGetStats(t *testing.T) {
 	processPath = mockProcFs()
 	defer os.RemoveAll(processPath)
 
+	enabledCMT, enabledMBM = true, true
+
 	var testCases = []struct {
 		container string
-		expected intelrdt.Stats
-		err string
+		expected  intelrdt.Stats
+		err       string
 	}{
 		{
 			"container",
 			intelrdt.Stats{
-					MBMStats:          &[]intelrdt.MBMNumaNodeStats{
-						{
-							MBMTotalBytes: 0,
-							MBMLocalBytes: 0,
-						},
-						{
-							MBMTotalBytes: 0,
-							MBMLocalBytes: 0,
-						},
+				MBMStats: &[]intelrdt.MBMNumaNodeStats{
+					{
+						MBMTotalBytes: 3333,
+						MBMLocalBytes: 2222,
 					},
-					CMTStats:          &[]intelrdt.CMTNumaNodeStats{
-						{
-							LLCOccupancy: 1234,
-						},
-						{
-							LLCOccupancy: 1234,
-						},
+					{
+						MBMTotalBytes: 3333,
+						MBMLocalBytes: 1111,
 					},
 				},
+				CMTStats: &[]intelrdt.CMTNumaNodeStats{
+					{
+						LLCOccupancy: 1111,
+					},
+					{
+						LLCOccupancy: 3333,
+					},
+				},
+			},
 			"",
 		},
 		{
 			"another",
-			intelrdt.Stats{},
+			intelrdt.Stats{
+				MBMStats: &[]intelrdt.MBMNumaNodeStats{
+					{
+						MBMTotalBytes: 3333,
+						MBMLocalBytes: 2222,
+					},
+					{
+						MBMTotalBytes: 3333,
+						MBMLocalBytes: 1111,
+					},
+				},
+				CMTStats: &[]intelrdt.CMTNumaNodeStats{
+					{
+						LLCOccupancy: 1111,
+					},
+					{
+						LLCOccupancy: 3333,
+					},
+				},
+			},
 			"",
 		},
 		{
 			"/",
-			intelrdt.Stats{},
+			intelrdt.Stats{
+				MBMStats: &[]intelrdt.MBMNumaNodeStats{
+					{
+						MBMTotalBytes: 3333,
+						MBMLocalBytes: 2222,
+					},
+					{
+						MBMTotalBytes: 3333,
+						MBMLocalBytes: 1111,
+					},
+				},
+				CMTStats: &[]intelrdt.CMTNumaNodeStats{
+					{
+						LLCOccupancy: 1111,
+					},
+					{
+						LLCOccupancy: 3333,
+					},
+				},
+			},
 			"",
 		},
 	}

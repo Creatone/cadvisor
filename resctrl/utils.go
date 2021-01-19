@@ -239,6 +239,10 @@ func getStats(path string) (intelrdt.Stats, error) {
 		return stats, err
 	}
 
+	if len(numaDirs) == 0 {
+		return stats, fmt.Errorf("there is no mon_data NUMA dirs: %q", path)
+	}
+
 	stats.CMTStats = &[]intelrdt.CMTNumaNodeStats{}
 	stats.MBMStats = &[]intelrdt.MBMNumaNodeStats{}
 

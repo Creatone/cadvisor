@@ -20,9 +20,9 @@ package resctrl
 import (
 	"os"
 
-	info "github.com/google/cadvisor/info/v1"
-
 	"k8s.io/klog/v2"
+
+	info "github.com/google/cadvisor/info/v1"
 )
 
 type collector struct {
@@ -50,13 +50,13 @@ func (c *collector) prepareMonGroup() {
 	if c.id != rootContainer {
 		newPath, err := getResctrlPath(c.id)
 		if err != nil {
-			klog.V(5).Error(err, "couldn't update %v pids", c.id)
+			klog.V(1).Error(err, "couldn't update mon_group", c.id, c.resctrlPath)
 		}
 
 		if newPath != c.resctrlPath {
 			err = os.RemoveAll(c.resctrlPath)
 			if err != nil {
-				klog.V(5).Error(err, "couldn't update %v pids", c.id)
+				klog.V(1).Error(err, "couldn't update mon_group", c.id, c.resctrlPath)
 			}
 			c.resctrlPath = newPath
 		}

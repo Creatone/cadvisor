@@ -19,6 +19,7 @@ package resctrl
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,9 +28,19 @@ import (
 )
 
 func TestNewCollector(t *testing.T) {
-	expectedId := "id"
-	expectedResctrlPath := "path"
-	collector := newCollector(expectedId, expectedResctrlPath)
+	rootResctrl = mockResctrl()
+	defer os.RemoveAll(rootResctrl)
+
+	pidsPath = mockContainersPids()
+	defer os.RemoveAll(pidsPath)
+
+	processPath = mockProcFs()
+	defer os.RemoveAll(processPath)
+
+	expectedId := "container"
+	expectedResctrlPath := filepath.Join(rootResctrl, monGroupsDirName, expectedId)
+
+	collector, _ := newCollector(expectedId)
 
 	assert.Equal(t, collector.id, expectedId)
 	assert.Equal(t, collector.resctrlPath, expectedResctrlPath)
@@ -45,13 +56,14 @@ func TestUpdateStats(t *testing.T) {
 	processPath = mockProcFs()
 	defer os.RemoveAll(processPath)
 
-	path, err := getResctrlPath("container")
-	assert.NoError(t, err)
+	collector, err := newCollector("container")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 
-	mockResctrlMonData(path)
+	mockResctrlMonData(collector.resctrlPath)
 	enabledCMT, enabledMBM = true, true
 
-	collector := newCollector("container", path)
 	stats := info.ContainerStats{}
 
 	// Write some dumb data.
@@ -86,7 +98,10 @@ func TestDestroy(t *testing.T) {
 	path, err := getResctrlPath("container")
 	assert.NoError(t, err)
 
-	collector := newCollector("container")
+	collector, err := newCollector("container")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 
 	if stat, err := os.Stat(path); !stat.IsDir() || err != nil {
 		t.Fail()

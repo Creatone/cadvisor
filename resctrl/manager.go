@@ -20,6 +20,8 @@ package resctrl
 import (
 	"time"
 
+	"k8s.io/klog/v2"
+
 	"github.com/google/cadvisor/stats"
 
 	"github.com/opencontainers/runc/libcontainer/intelrdt"
@@ -37,8 +39,6 @@ func (m *manager) GetCollector(containerName string) (stats.Collector, error) {
 		return &stats.NoopCollector{}, err
 	}
 
-	collector.prepareMonGroup()
-
 	m.collectors = append(m.collectors, collector)
 
 	return collector, nil
@@ -51,8 +51,11 @@ func (m *manager) handleInterval() {
 				time.Sleep(m.interval)
 				for i := 0; i < len(m.collectors); i++ {
 					if m.collectors[i].running {
+						klog.V(1).Infof("Trying: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
 						m.collectors[i].prepareMonGroup()
+						klog.V(1).Infof("Recreated: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
 					} else {
+						klog.V(1).Infof("Deleting: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
 						m.collectors = append(m.collectors[:i], m.collectors[i+1:]...)
 					}
 				}
