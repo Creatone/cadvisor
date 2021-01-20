@@ -18,6 +18,7 @@
 package resctrl
 
 import (
+	"sync"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -29,11 +30,14 @@ import (
 
 type manager struct {
 	stats.NoopDestroy
-	interval   time.Duration
-	collectors []*collector
+	interval       time.Duration
+	collectors     []*collector
+	collectorsLock sync.Mutex
 }
 
 func (m *manager) GetCollector(containerName string) (stats.Collector, error) {
+	m.collectorsLock.Lock()
+	defer m.collectorsLock.Unlock()
 	collector, err := newCollector(containerName)
 	if err != nil {
 		return &stats.NoopCollector{}, err
@@ -66,7 +70,7 @@ func (m *manager) handleInterval() {
 
 func NewManager(interval time.Duration) (stats.Manager, error) {
 	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
-		manager := &manager{interval: interval}
+		manager := &manager{interval: interval, collectorsLock: sync.Mutex{}}
 		manager.handleInterval()
 		return manager, nil
 	}
