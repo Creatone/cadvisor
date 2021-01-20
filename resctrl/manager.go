@@ -53,6 +53,7 @@ func (m *manager) handleInterval() {
 		go func() {
 			for {
 				time.Sleep(m.interval)
+				m.collectorsLock.Lock()
 				for i := 0; i < len(m.collectors); i++ {
 					if m.collectors[i].running {
 						klog.V(1).Infof("Trying: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
@@ -63,6 +64,7 @@ func (m *manager) handleInterval() {
 						m.collectors = append(m.collectors[:i], m.collectors[i+1:]...)
 					}
 				}
+				m.collectorsLock.Unlock()
 			}
 		}()
 	}
