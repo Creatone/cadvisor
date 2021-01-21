@@ -36,14 +36,15 @@ type manager struct {
 }
 
 func (m *manager) GetCollector(containerName string) (stats.Collector, error) {
-	m.collectorsLock.Lock()
-	defer m.collectorsLock.Unlock()
 	collector, err := newCollector(containerName)
 	if err != nil {
 		return &stats.NoopCollector{}, err
 	}
 
+	m.collectorsLock.Lock()
 	m.collectors = append(m.collectors, collector)
+	m.collectorsLock.Unlock()
+	klog.Infof("[RESCTRL] New container: %q | len(collectors)=%d", containerName, len(m.collectors))
 
 	return collector, nil
 }
@@ -53,18 +54,16 @@ func (m *manager) handleInterval() {
 		go func() {
 			for {
 				time.Sleep(m.interval)
-				m.collectorsLock.Lock()
+				klog.Infof("[RESCTRL] INTERVAL | len(collectors)=%d", len(m.collectors))
 				for i := 0; i < len(m.collectors); i++ {
 					if m.collectors[i].running {
-						klog.V(1).Infof("Trying: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
 						m.collectors[i].prepareMonGroup()
-						klog.V(1).Infof("Recreated: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
 					} else {
-						klog.V(1).Infof("Deleting: %q | %q", m.collectors[i].id, m.collectors[i].resctrlPath)
+						m.collectorsLock.Lock()
 						m.collectors = append(m.collectors[:i], m.collectors[i+1:]...)
+						m.collectorsLock.Unlock()
 					}
 				}
-				m.collectorsLock.Unlock()
 			}
 		}()
 	}

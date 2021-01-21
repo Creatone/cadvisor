@@ -50,13 +50,13 @@ func (c *collector) prepareMonGroup() {
 	if c.id != rootContainer {
 		newPath, err := getResctrlPath(c.id)
 		if err != nil {
-			klog.V(1).Error(err, "couldn't update mon_group", c.id, c.resctrlPath)
+			klog.Error(err, " | couldn't update mon_group", c.id, c.resctrlPath)
 		}
 
 		if newPath != c.resctrlPath {
 			err = os.RemoveAll(c.resctrlPath)
 			if err != nil {
-				klog.V(1).Error(err, "couldn't update mon_group", c.id, c.resctrlPath)
+				klog.Error(err, " | couldn't update mon_group", c.id, c.resctrlPath)
 			}
 			c.resctrlPath = newPath
 		}
