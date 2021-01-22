@@ -18,10 +18,7 @@
 package resctrl
 
 import (
-	"sync"
 	"time"
-
-	"k8s.io/klog/v2"
 
 	"github.com/google/cadvisor/stats"
 
@@ -30,49 +27,23 @@ import (
 
 type manager struct {
 	stats.NoopDestroy
-	interval       time.Duration
-	collectors     []*collector
-	collectorsLock sync.Mutex
+	interval time.Duration
 }
 
 func (m *manager) GetCollector(containerName string) (stats.Collector, error) {
-	collector, err := newCollector(containerName)
+	collector := newCollector(containerName, m.interval)
+
+	err := collector.setup()
 	if err != nil {
 		return &stats.NoopCollector{}, err
 	}
 
-	m.collectorsLock.Lock()
-	m.collectors = append(m.collectors, collector)
-	m.collectorsLock.Unlock()
-	klog.Infof("[RESCTRL] New container: %q | len(collectors)=%d", containerName, len(m.collectors))
-
 	return collector, nil
-}
-
-func (m *manager) handleInterval() {
-	if m.interval != 0 {
-		go func() {
-			for {
-				time.Sleep(m.interval)
-				klog.Infof("[RESCTRL] INTERVAL | len(collectors)=%d", len(m.collectors))
-				for i := 0; i < len(m.collectors); i++ {
-					if m.collectors[i].running {
-						m.collectors[i].prepareMonGroup()
-					} else {
-						m.collectorsLock.Lock()
-						m.collectors = append(m.collectors[:i], m.collectors[i+1:]...)
-						m.collectorsLock.Unlock()
-					}
-				}
-			}
-		}()
-	}
 }
 
 func NewManager(interval time.Duration) (stats.Manager, error) {
 	if intelrdt.IsMBMEnabled() || intelrdt.IsCMTEnabled() {
-		manager := &manager{interval: interval, collectorsLock: sync.Mutex{}}
-		manager.handleInterval()
+		manager := &manager{interval: interval}
 		return manager, nil
 	}
 
